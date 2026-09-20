@@ -9,7 +9,9 @@ import '../../core/utils/app_input_formatters.dart';
 import '../../models/assistance_request.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/utils/auth_guard.dart';
+import '../../core/services/cloud_sync_service.dart';
 import '../auth/login_screen.dart';
+import 'my_requests_screen.dart';
 
 class AssistanceRequestScreen extends StatefulWidget {
   const AssistanceRequestScreen({super.key});
@@ -364,6 +366,13 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
       appBar: AppBar(
         title: const Text('طلب مساعدة مالية'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.list_alt_rounded, color: Colors.white),
+            tooltip: 'متابعة طلباتي السابقة',
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const MyRequestsScreen()));
+            },
+          ),
           IconButton(
             key: const Key('btn_purge_request_data_appbar'),
             icon: const Icon(Icons.delete_sweep_outlined, color: Colors.white),

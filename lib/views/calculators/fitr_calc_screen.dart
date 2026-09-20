@@ -8,6 +8,7 @@ import '../../core/widgets/zakat_result_card.dart';
 import '../../models/favorite_item.dart';
 import '../../providers/zakat_provider.dart';
 import '../../providers/favorites_provider.dart';
+import '../../core/services/cloud_sync_service.dart';
 
 class FitrCalcScreen extends StatefulWidget {
   const FitrCalcScreen({super.key});
@@ -45,7 +46,9 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
   @override
   void initState() {
     super.initState();
-    _wheatPriceController.text = ZakatConstants.defaultWheatBagPriceYER.toStringAsFixed(0);
+    final cloudSync = Provider.of<CloudSyncService>(context, listen: false);
+    _wheatPriceController.text = cloudSync.wheatBagPriceYER.toStringAsFixed(0);
+    _bagWeightKg = cloudSync.wheatBagWeightKg;
     _syncCashFromWheat();
   }
 

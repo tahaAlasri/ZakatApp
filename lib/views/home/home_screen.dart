@@ -15,6 +15,9 @@ import '../../core/utils/auth_guard.dart';
 import '../../core/widgets/category_icon_badge.dart';
 import '../analytics/zakat_analytics_screen.dart';
 import '../history/zakat_history_screen.dart';
+import '../../core/services/cloud_sync_service.dart';
+import '../requests/my_requests_screen.dart';
+import '../notifications/notifications_center_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
