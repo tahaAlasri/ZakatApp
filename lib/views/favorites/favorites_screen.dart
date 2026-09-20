@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/category_icon_badge.dart';
 import '../../models/favorite_item.dart';
 import '../../providers/favorites_provider.dart';
 import '../calculators/money_calc_screen.dart';
@@ -11,6 +12,7 @@ import '../calculators/crops_calc_screen.dart';
 import '../calculators/livestock_calc_screen.dart';
 import '../calculators/minerals_screen.dart';
 import '../calculators/fields_calc_screen.dart';
+import '../calculators/fitr_calc_screen.dart';
 
 class FavoritesScreen extends StatelessWidget {
   const FavoritesScreen({super.key});
@@ -41,6 +43,9 @@ class FavoritesScreen extends StatelessWidget {
         break;
       case '/fields_calc':
         screen = const FieldsCalcScreen();
+        break;
+      case '/fitr_calc':
+        screen = const FitrCalcScreen();
         break;
       default:
         screen = const MoneyCalcScreen();
@@ -122,7 +127,13 @@ class FavoritesScreen extends StatelessWidget {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('تمت إزالة "${item.title}" من المفضلة'),
-                      duration: const Duration(seconds: 2),
+                      duration: const Duration(seconds: 3),
+                      behavior: SnackBarBehavior.floating,
+                      action: SnackBarAction(
+                        label: 'تراجع',
+                        textColor: Colors.amberAccent,
+                        onPressed: () => favProv.addFavorite(item),
+                      ),
                     ),
                   );
                 },
@@ -130,15 +141,13 @@ class FavoritesScreen extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    leading: Container(
-                      width: 50,
-                      height: 50,
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.emeraldSubtle,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Image.asset(item.imagePath, fit: BoxFit.contain),
+                    leading: CategoryIconBadge(
+                      imagePath: item.imagePath,
+                      size: 50,
+                      iconSize: 26,
+                      padding: 6,
+                      borderRadius: 12,
+                      fallbackIcon: Icons.favorite_outline,
                     ),
                     title: Text(
                       item.title,
@@ -150,7 +159,22 @@ class FavoritesScreen extends StatelessWidget {
                     ),
                     trailing: IconButton(
                       icon: const Icon(Icons.favorite, color: Colors.redAccent),
-                      onPressed: () => favProv.removeFavorite(item.id),
+                      tooltip: 'إزالة من المفضلة',
+                      onPressed: () {
+                        favProv.removeFavorite(item.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('تمت إزالة "${item.title}" من المفضلة'),
+                            duration: const Duration(seconds: 3),
+                            behavior: SnackBarBehavior.floating,
+                            action: SnackBarAction(
+                              label: 'تراجع',
+                              textColor: Colors.amberAccent,
+                              onPressed: () => favProv.addFavorite(item),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                     onTap: () => _navigateToItem(context, item),
                   ),

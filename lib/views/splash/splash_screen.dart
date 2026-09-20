@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/preferences_service.dart';
-import '../../core/services/auth_service.dart';
 import '../onboarding/onboarding_screen.dart';
-import '../auth/login_screen.dart';
 import '../dashboard/main_navigation_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -57,16 +55,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     if (!mounted) return;
 
     final isOnboardingCompleted = PreferencesService.isOnboardingCompleted;
-    final currentUser = AuthService.currentUser;
 
-    Widget nextScreen;
-    if (!isOnboardingCompleted) {
-      nextScreen = const OnboardingScreen();
-    } else if (currentUser != null) {
-      nextScreen = const MainNavigationScreen();
-    } else {
-      nextScreen = const LoginScreen();
-    }
+    // Enter directly to MainNavigationScreen (as guest or authenticated user)
+    final Widget nextScreen = isOnboardingCompleted
+        ? const MainNavigationScreen()
+        : const OnboardingScreen();
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
@@ -154,13 +147,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   child: Column(
                     children: [
                       const Text(
-                        'زكــــاتــي',
+                        'الهيئة العامة للزكاة',
                         style: TextStyle(
-                          fontSize: 36,
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          letterSpacing: 2,
+                          letterSpacing: 1.2,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       Container(

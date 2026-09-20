@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/preferences_service.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/zakat_provider.dart';
 import 'register_screen.dart';
 import '../dashboard/main_navigation_screen.dart';
 
@@ -23,7 +24,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    if (_rememberMe) {
+    if (PreferencesService.savedEmail.isNotEmpty) {
+      _emailController.text = PreferencesService.savedEmail;
+      _rememberMe = true;
+    } else if (_rememberMe) {
       _emailController.text = PreferencesService.savedEmail;
     }
   }
@@ -55,14 +59,20 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('مرحباً بك ${auth.user?.name ?? ""}، تم تسجيل الدخول بنجاح'),
+          backgroundColor: AppColors.emeraldPrimary,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
+      _navigateAfterAuth();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(auth.errorMessage ?? 'فشل تسجيل الدخول'),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -70,28 +80,65 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _onBiometricLogin() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    final success = await auth.loginWithBiometrics();
+    final emailText = _emailController.text.trim();
+    final success = await auth.loginWithBiometrics(
+      hintEmail: emailText.isNotEmpty ? emailText : null,
+    );
 
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-      );
-    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(auth.errorMessage ?? 'تعذرت المصادقة بالبصمة'),
-          backgroundColor: AppColors.warning,
+          content: Text('أهلاً بك ${auth.user?.name ?? ""}، تم التحقق والمصادقة بالبصمة بنجاح'),
+          backgroundColor: AppColors.emeraldPrimary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _navigateAfterAuth();
+    } else {
+      final msg = auth.errorMessage ?? 'تعذرت المصادقة بالبصمة';
+      final isNoAccount = msg.contains('لا يوجد حساب مسجل') || msg.contains('تسجيل الدخول بالبريد أولاً');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: isNoAccount ? AppColors.emeraldPrimary : AppColors.warning,
+          action: isNoAccount
+              ? SnackBarAction(
+                  label: 'إنشاء حساب',
+                  textColor: AppColors.goldAccent,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                    );
+                  },
+                )
+              : null,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
   }
 
+  void _navigateAfterAuth() {
+    Provider.of<ZakatProvider>(context, listen: false).loadRecords();
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop(true);
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+      );
+    }
+  }
+
   void _loginAsGuest() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-    );
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop(false);
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+      );
+    }
   }
 
   @override
@@ -99,6 +146,19 @@ class _LoginScreenState extends State<LoginScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      appBar: Navigator.canPop(context)
+          ? AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: isDark ? Colors.white : AppColors.emeraldPrimary,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -143,7 +203,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'أهلاً بك مجدداً في تطبيق زكاتي',
+                    'أهلاً بك مجدداً في تطبيق الهيئة العامة للزكاة',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,

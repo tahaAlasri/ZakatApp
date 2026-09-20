@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Final Pro</string>
+	<string>الهيئة العامة للزكاة</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>يحتاج التطبيق لصلاحية الكاميرا لالتقاط الصورة الشخصية لحسابك أو إرفاق المستندات.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>يحتاج التطبيق لصلاحية الصور لاختيار صورتك الشخصية أو إرفاق مستندات المساعدة.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>تُستخدم للتحقق الحيوي للدخول السريع والآمن إلى حسابك.</string>
 </dict>
 </plist>

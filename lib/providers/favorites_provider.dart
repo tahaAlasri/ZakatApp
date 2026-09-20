@@ -29,6 +29,11 @@ class FavoritesProvider extends ChangeNotifier {
     loadFavorites();
   }
 
+  Future<void> addFavorite(FavoriteItem item) async {
+    await LocalDbService.saveFavorite(item);
+    loadFavorites();
+  }
+
   Future<void> removeFavorite(String id) async {
     await LocalDbService.removeFavorite(id);
     loadFavorites();

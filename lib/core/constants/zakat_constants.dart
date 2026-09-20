@@ -10,10 +10,18 @@ class ZakatConstants {
   static const double rainFedRate = 0.10; // 10% سقيت بماء المطر / سيحاً (العشر)
   static const double irrigatedRate = 0.05; // 5% سقيت بالآلات والنواضح (نصف العشر)
   static const double mixedRate = 0.075; // 7.5% مشتركة
+  static const double cropsNisabKg = 612.0; // 5 أوسق = 300 صاع نبوي ≈ 612 كجم من الحبوب والثمار
+
+  // Zakat al-Fitr constants
+  static const double fitrSaWeightKg = 2.5; // الصاع النبوي بالكيلوغرام (حوالي 2.5 كجم من غالب قوت البلد)
+  static const double defaultWheatBagWeightKg = 50.0; // وزن كيس القمح الشائع (50 كجم = 20 صاع نبوي)
+  static const double defaultWheatBagPriceYER = 24000.0; // السعر التقديري لكيس القمح 50 كجم بالريال اليمني
+  static const double defaultFitrCashYER = 1200.0; // القيمة التقديرية النقدية للصاع (24000 ÷ 20 صاع)
 
   // Default market estimates (Can be edited by user dynamically)
+  static const double defaultGold24PriceYER = 62850.0; // الأساس المعتمد للنصاب الشرعي
   static const double defaultGold21PriceYER = 55000.0;
-  static const double defaultGold24PriceYER = 62850.0;
+  static const double defaultGold18PriceYER = 47150.0;
   static const double defaultSilverPriceYER = 700.0;
 
   // Livestock Nisab thresholds

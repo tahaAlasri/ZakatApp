@@ -4,6 +4,7 @@ class UserModel {
   final String email;
   final String phone;
   final bool isBiometricEnabled;
+  final String? profileImagePath;
   final DateTime createdAt;
 
   UserModel({
@@ -12,6 +13,7 @@ class UserModel {
     required this.email,
     required this.phone,
     this.isBiometricEnabled = false,
+    this.profileImagePath,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -22,6 +24,7 @@ class UserModel {
       'email': email,
       'phone': phone,
       'isBiometricEnabled': isBiometricEnabled,
+      'profileImagePath': profileImagePath,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -33,6 +36,7 @@ class UserModel {
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
       isBiometricEnabled: map['isBiometricEnabled'] ?? false,
+      profileImagePath: map['profileImagePath'],
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt']) ?? DateTime.now()
           : DateTime.now(),
@@ -45,6 +49,7 @@ class UserModel {
     String? email,
     String? phone,
     bool? isBiometricEnabled,
+    String? profileImagePath,
     DateTime? createdAt,
   }) {
     return UserModel(
@@ -53,6 +58,7 @@ class UserModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       isBiometricEnabled: isBiometricEnabled ?? this.isBiometricEnabled,
+      profileImagePath: profileImagePath ?? this.profileImagePath,
       createdAt: createdAt ?? this.createdAt,
     );
   }

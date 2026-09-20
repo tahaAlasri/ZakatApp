@@ -31,7 +31,14 @@ class PermissionService {
 
   static Future<List<PermissionItem>> getAppPermissions() async {
     final notificationStatus = await Permission.notification.status;
-    final storageStatus = await Permission.storage.status;
+    var storageStatus = await Permission.storage.status;
+    if (!storageStatus.isGranted) {
+      final photosStatus = await Permission.photos.status;
+      if (photosStatus.isGranted) {
+        storageStatus = photosStatus;
+      }
+    }
+    final cameraStatus = await Permission.camera.status;
 
     return [
       PermissionItem(
@@ -46,10 +53,21 @@ class PermissionService {
         description: 'تُستخدم لحفظ شهادات وإقرارات الزكاة بصيغة PDF على جهازك.',
         status: storageStatus,
       ),
+      PermissionItem(
+        permission: Permission.camera,
+        title: 'صلاحية الكاميرا والصور',
+        description: 'تُستخدم لالتقاط وتحديد صورة حسابك الشخصي أو إرفاق مستندات المساعدة.',
+        status: cameraStatus,
+      ),
     ];
   }
 
   static Future<PermissionStatus> requestPermission(Permission permission) async {
+    if (permission == Permission.storage) {
+      final status = await Permission.storage.request();
+      if (status.isGranted) return status;
+      return await Permission.photos.request();
+    }
     return await permission.request();
   }
 

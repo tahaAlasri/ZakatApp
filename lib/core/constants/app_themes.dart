@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class AppThemes {
   static ThemeData get lightTheme {
-    return ThemeData(
+    final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       primaryColor: AppColors.emeraldPrimary,
@@ -18,13 +19,12 @@ class AppThemes {
         error: AppColors.error,
         onError: Colors.white,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.emeraldPrimary,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontFamily: 'Cairo',
+        titleTextStyle: GoogleFonts.cairo(
           fontSize: 20,
           fontWeight: FontWeight.bold,
           color: Colors.white,
@@ -48,8 +48,7 @@ class AppThemes {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: const TextStyle(
-            fontFamily: 'Cairo',
+          textStyle: GoogleFonts.cairo(
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
@@ -75,15 +74,18 @@ class AppThemes {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.error),
         ),
-        labelStyle: TextStyle(color: Colors.grey.shade700, fontFamily: 'Cairo'),
-        hintStyle: TextStyle(color: Colors.grey.shade400, fontFamily: 'Cairo'),
+        labelStyle: TextStyle(color: Colors.grey.shade700),
+        hintStyle: TextStyle(color: Colors.grey.shade400),
       ),
-      fontFamily: 'Cairo',
+    );
+
+    return base.copyWith(
+      textTheme: GoogleFonts.cairoTextTheme(base.textTheme),
     );
   }
 
   static ThemeData get darkTheme {
-    return ThemeData(
+    final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       primaryColor: AppColors.emeraldLight,
@@ -98,13 +100,12 @@ class AppThemes {
         error: AppColors.error,
         onError: Colors.white,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.darkSurface,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontFamily: 'Cairo',
+        titleTextStyle: GoogleFonts.cairo(
           fontSize: 20,
           fontWeight: FontWeight.bold,
           color: Colors.white,
@@ -128,8 +129,7 @@ class AppThemes {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: const TextStyle(
-            fontFamily: 'Cairo',
+          textStyle: GoogleFonts.cairo(
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
@@ -155,10 +155,13 @@ class AppThemes {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.error),
         ),
-        labelStyle: const TextStyle(color: AppColors.textSecondaryDark, fontFamily: 'Cairo'),
-        hintStyle: TextStyle(color: Colors.grey.shade600, fontFamily: 'Cairo'),
+        labelStyle: const TextStyle(color: AppColors.textSecondaryDark),
+        hintStyle: TextStyle(color: Colors.grey.shade600),
       ),
-      fontFamily: 'Cairo',
+    );
+
+    return base.copyWith(
+      textTheme: GoogleFonts.cairoTextTheme(base.textTheme),
     );
   }
 }

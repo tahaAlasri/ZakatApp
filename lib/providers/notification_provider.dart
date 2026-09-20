@@ -1,26 +1,16 @@
 import 'package:flutter/material.dart';
 import '../core/services/notification_service.dart';
-import '../core/services/permission_service.dart';
+import '../core/database/preferences_service.dart';
 
 class NotificationProvider extends ChangeNotifier {
-  bool _notificationsEnabled = true;
+  bool _notificationsEnabled = PreferencesService.notificationsEnabled;
 
   bool get notificationsEnabled => _notificationsEnabled;
 
   void toggleNotifications(bool enabled) {
     _notificationsEnabled = enabled;
+    PreferencesService.setNotificationsEnabled(enabled);
     notifyListeners();
-  }
-
-  Future<void> sendTestNotification() async {
-    // Request permission first
-    await PermissionService.requestNotificationPermission();
-
-    await NotificationService.showNotification(
-      id: 999,
-      title: '🔔 إشعار تجريبي من تطبيق زكاتي',
-      body: 'نظام الإشعارات والتنبيهات يعمل بنجاح تام وفق متطلبات المشروع!',
-    );
   }
 
   Future<void> sendHawlAlert({required int daysRemaining, required String dueDateStr}) async {
@@ -29,6 +19,16 @@ class NotificationProvider extends ChangeNotifier {
       daysRemaining: daysRemaining,
       dueDateStr: dueDateStr,
     );
+  }
+
+  Future<void> notifyEmailSent({required String subject}) async {
+    if (!_notificationsEnabled) return;
+    await NotificationService.showEmailSentNotification(subject: subject);
+  }
+
+  Future<void> notifyHawlCompleted({required String dueDateStr}) async {
+    if (!_notificationsEnabled) return;
+    await NotificationService.showHawlCompletedNotification(dueDateStr: dueDateStr);
   }
 
   Future<void> notifyZakatSaved({
@@ -40,5 +40,20 @@ class NotificationProvider extends ChangeNotifier {
       typeName: typeName,
       zakatAmount: zakatAmount,
     );
+  }
+
+  Future<void> scheduleHawlMilestones({
+    required DateTime dueDate,
+    required String dueDateStr,
+  }) async {
+    if (!_notificationsEnabled) return;
+    await NotificationService.scheduleHawlAlerts(
+      dueDate: dueDate,
+      dueDateStr: dueDateStr,
+    );
+  }
+
+  Future<void> cancelHawlAlerts() async {
+    await NotificationService.cancelHawlAlerts();
   }
 }

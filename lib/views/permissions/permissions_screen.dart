@@ -94,7 +94,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'يلتزم تطبيق زكاتي بحماية خصوصيتك ويطلب الصلاحيات الضرورية فقط لتشغيل الميزات.',
+                                'يلتزم تطبيق الهيئة العامة للزكاة بحماية خصوصيتك ويطلب الصلاحيات الضرورية فقط لتشغيل الميزات.',
                                 style: TextStyle(fontSize: 12, color: Colors.grey),
                               ),
                             ],

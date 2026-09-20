@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/preferences_service.dart';
-import '../auth/login_screen.dart';
+import '../dashboard/main_navigation_screen.dart';
 
 class OnboardingSlide {
   final String title;
@@ -39,7 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'متتبع الحول الذكي وتنبيهات النصاب',
       description: 'سجّل تاريخ بلوغ النصاب ليتتبع التطبيق الحول الهجري تلقائياً وينبهك قبل موعد إخراج الزكاة.',
       imagePath: 'assets/images/gold.png',
-      icon: Icons.notifications_active_outlined,
+      icon: Icons.timer_outlined,
     ),
     OnboardingSlide(
       title: 'تقارير رسمية وطلبات المساعدة',
@@ -52,13 +52,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void _onFinish() async {
     await PreferencesService.setOnboardingCompleted(true);
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -123,17 +128,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           height: 200,
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: AppColors.emeraldSubtle,
+                            color: isDark
+                                ? AppColors.emeraldPrimary.withValues(alpha: 0.25)
+                                : AppColors.emeraldSubtle,
                             shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.goldAccent.withValues(alpha: 0.5), width: 2),
+                            border: Border.all(
+                              color: AppColors.goldAccent.withValues(alpha: isDark ? 0.7 : 0.5),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: isDark
+                                    ? Colors.black.withValues(alpha: 0.3)
+                                    : AppColors.emeraldPrimary.withValues(alpha: 0.08),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
                           ),
                           child: Image.asset(
-                            slide.imagePath,
+                            isDark
+                                ? slide.imagePath.replaceFirst('assets/images/', 'assets/images/dark/')
+                                : slide.imagePath,
                             fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) => Icon(
                               slide.icon,
                               size: 80,
-                              color: AppColors.emeraldPrimary,
+                              color: isDark ? AppColors.goldLight : AppColors.emeraldPrimary,
                             ),
                           ),
                         ),

@@ -26,7 +26,7 @@ class BiometricsService {
     try {
       final bool isAvailable = await isBiometricsAvailable();
       if (!isAvailable) {
-        return false;
+        throw Exception('جهازك لا يدعم مستشعر البصمة أو لم يتم تفعيل قفل الشاشة في إعدادات النظام');
       }
 
       return await _auth.authenticate(
@@ -37,7 +37,18 @@ class BiometricsService {
           useErrorDialogs: true,
         ),
       );
-    } on PlatformException catch (_) {
+    } on PlatformException catch (e) {
+      if (e.code == 'NotEnrolled') {
+        throw Exception('لم يتم تسجيل بصمة في إعدادات الهاتف بعد. يرجى إضافة بصمة إصبع في إعدادات الجهاز أولاً.');
+      } else if (e.code == 'LockedOut') {
+        throw Exception('تم قفل مستشعر البصمة مؤقتاً بسبب كثرة المحاولات، يرجى المحاولة لاحقاً أو استخدام كلمة المرور.');
+      } else if (e.code == 'PermanentlyLockedOut') {
+        throw Exception('تم قفل مستشعر البصمة نهائياً، يرجى فتح قفل الهاتف برمز المرور أو النمط.');
+      } else if (e.code == 'PasscodeNotSet') {
+        throw Exception('يرجى تعيين قفل شاشة (PIN أو نمط أو بصمة) في إعدادات الجهاز للمتابعة.');
+      } else if (e.code == 'NotAvailable') {
+        throw Exception('مستشعر البصمة غير متاح حالياً على هذا الجهاز.');
+      }
       return false;
     }
   }

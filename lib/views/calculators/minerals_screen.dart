@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/services/pdf_service.dart';
-import '../../core/utils/formatters.dart';
-import '../../models/zakat_record.dart';
+import '../../core/utils/app_input_formatters.dart';
+import '../../core/widgets/category_icon_badge.dart';
+import '../../core/widgets/zakat_result_card.dart';
 import '../../models/favorite_item.dart';
 import '../../providers/zakat_provider.dart';
 import '../../providers/favorites_provider.dart';
@@ -16,6 +16,7 @@ class MineralsScreen extends StatefulWidget {
 }
 
 class _MineralsScreenState extends State<MineralsScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   bool _isRikaz = true; // true = الركاز (20%), false = المعادن (2.5%)
   ZakatCalculationResult? _result;
@@ -28,7 +29,9 @@ class _MineralsScreenState extends State<MineralsScreen> {
   }
 
   void _calculate() {
-    final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
+    if (!_formKey.currentState!.validate()) return;
+
+    final amount = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_amountController.text.trim())) ?? 0.0;
     final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
 
     final res = zakatProv.calculateMineralsZakat(
@@ -40,52 +43,19 @@ class _MineralsScreenState extends State<MineralsScreen> {
       _result = res;
       _isCalculated = true;
     });
-  }
 
-  void _saveRecord() async {
-    if (_result == null) return;
-    final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
-    final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-
-    final record = ZakatRecord(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      typeName: _isRikaz ? 'زكاة الركاز (دفين الجاهلية)' : 'زكاة المعادن والمنتجات المائية',
-      categoryKey: 'minerals',
-      totalWealth: amount,
-      zakatAmount: _result!.zakatAmount,
-      currency: zakatProv.currency,
-      reachedNisab: _result!.reachedNisab,
-      notes: _result!.explanation,
-    );
-
-    await zakatProv.saveRecord(record);
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم حفظ زكاة الركاز والمعادن في السجل'),
-        backgroundColor: AppColors.success,
+      SnackBar(
+        content: Text(
+          res.reachedNisab
+              ? 'تم احتساب زكاة ${_isRikaz ? "الركاز" : "المعادن"} بنجاح'
+              : 'لم تبلغ قيمة المعادن المستخرجة النصاب الشرعي',
+        ),
+        backgroundColor: res.reachedNisab ? AppColors.emeraldPrimary : Colors.orange.shade800,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
       ),
     );
-  }
-
-  void _exportPdf() async {
-    if (_result == null) return;
-    final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
-    final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-
-    final record = ZakatRecord(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      typeName: _isRikaz ? 'زكاة الركاز (الخمس)' : 'زكاة المعادن',
-      categoryKey: 'minerals',
-      totalWealth: amount,
-      zakatAmount: _result!.zakatAmount,
-      currency: zakatProv.currency,
-      reachedNisab: _result!.reachedNisab,
-      notes: _result!.explanation,
-    );
-
-    final pdfBytes = await PdfService.generateZakatReceipt(record);
-    await PdfService.shareOrPrintPdf(pdfBytes, 'zakat_minerals_receipt.pdf');
   }
 
   @override
@@ -97,22 +67,35 @@ class _MineralsScreenState extends State<MineralsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('زكاة الركاز والمعادن'),
+        title: const Text('الركاز والمعادن'),
         actions: [
           IconButton(
             icon: Icon(
               isFav ? Icons.favorite : Icons.favorite_border,
               color: isFav ? Colors.redAccent : Colors.white,
             ),
+            tooltip: isFav ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة',
             onPressed: () {
+              final isNowFav = !isFav;
               favProv.toggleFavorite(
                 FavoriteItem(
                   id: favId,
-                  title: 'زكاة الركاز والمعادن',
-                  subtitle: 'حساب ما يجب في الركاز والمعادن المستخرجة',
+                  title: 'حاسبة الركاز والمعادن',
+                  subtitle: 'حساب زكاة الكنوز والمعادن المستخرجة',
                   type: 'calculator',
                   route: '/minerals_calc',
                   imagePath: 'assets/images/minral.png',
+                ),
+              );
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    isNowFav
+                        ? 'تمت إضافة "حاسبة الركاز والمعادن" إلى المفضلة'
+                        : 'تمت إزالة "حاسبة الركاز والمعادن" من المفضلة',
+                  ),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
                 ),
               );
             },
@@ -121,181 +104,119 @@ class _MineralsScreenState extends State<MineralsScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.emeraldSubtle,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Image.asset('assets/images/minral.png'),
-                    ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ما يجب في الركاز والمعادن',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          SizedBox(height: 4),
-                          Text(
-                            'في الركاز الخُمس (20%) فور استخراجه بلا اشتراط حول، والمعادن ربع العشر (2.5%).',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Type selector
-            Row(
-              children: [
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('الركاز (دفين الجاهلية) - 20%'),
-                    selected: _isRikaz,
-                    selectedColor: AppColors.goldAccent,
-                    onSelected: (val) => setState(() => _isRikaz = true),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('المعادن والمستخرجات - 2.5%'),
-                    selected: !_isRikaz,
-                    selectedColor: AppColors.goldAccent,
-                    onSelected: (val) => setState(() => _isRikaz = false),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'إجمالي القيمة المستخرجة المقومة',
-                suffixText: zakatProv.currency,
-                prefixIcon: const Icon(Icons.diamond_outlined, color: AppColors.goldDark),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            ElevatedButton.icon(
-              onPressed: _calculate,
-              icon: const Icon(Icons.calculate),
-              label: const Text('احسب الواجب إخراجه', style: TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(height: 20),
-
-            if (_isCalculated && _result != null) ...[
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Card(
-                color: AppColors.emeraldSubtle,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppColors.emeraldPrimary, width: 1.5),
-                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
                     children: [
-                      Text(
-                        _result!.explanation,
-                        style: const TextStyle(fontSize: 14, color: AppColors.emeraldDark),
+                      const CategoryIconBadge(
+                        imagePath: 'assets/images/minral.png',
+                        size: 60,
+                        iconSize: 32,
+                        padding: 8,
+                        borderRadius: 14,
+                        fallbackIcon: Icons.diamond_outlined,
                       ),
-                      const Divider(height: 24),
-                      const Text(
-                        'المقدار الواجب إخراجه فوراً:',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        AppFormatters.formatCurrency(_result!.zakatAmount, currency: zakatProv.currency),
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.emeraldPrimary,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'زكاة الركاز والمعادن',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'الركاز (دفين الجاهلية) يجب فيه الخمس (20%) فور استخراجه دون اشتراط حول أو نصاب، والمعادن المستخرجة من الأرض يجب فيها ربع العشر (2.5%) عند بلوغ النصاب الشرعي (85 جرام ذهب خالص عيار 24).',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _saveRecord,
-                              icon: const Icon(Icons.bookmark_add_outlined),
-                              label: const Text('حفظ بالسجل'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _exportPdf,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.goldAccent,
-                                foregroundColor: Colors.black,
-                              ),
-                              icon: const Icon(Icons.picture_as_pdf),
-                              label: const Text('تصدير PDF'),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
                 ),
               ),
-            ],
+              const SizedBox(height: 20),
 
-            const SizedBox(height: 24),
-
-            // Sharia Article 48 Details (from web project)
-            const Card(
-              child: ExpansionTile(
-                initiallyExpanded: false,
-                title: Text(
-                  'مصارف الركاز والمعادن (مادة 48 شرعية وقانونية)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.emeraldPrimary),
-                ),
-                children: [
-                  Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('1. سهم الله: ويصرف في مصالح المسلمين العامة كالطرق والمستشفيات والمدارس.'),
-                        SizedBox(height: 6),
-                        Text('2. سهم الرسول: لولي الأمر وله كل تصرف فيها بما يحقق المصلحة.'),
-                        SizedBox(height: 6),
-                        Text('3. ذوو القربى من بني هاشم: الذين حرمت عليهم الصدقة فجعل الله لهم الخمس.'),
-                        SizedBox(height: 6),
-                        Text('4. يتامى المسلمين: بمن فيهم يتامى ذوي القربى.'),
-                        SizedBox(height: 6),
-                        Text('5. عموم مساكين وفقراء المسلمين.'),
-                        SizedBox(height: 6),
-                        Text('6. ابن السبيل المنقطع عن نفقته.'),
-                      ],
-                    ),
-                  ),
-                ],
+              // Toggle Rikaz vs Minerals
+              const Text(
+                'نوع المستخرج من الأرض:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Card(
+                child: Column(
+                  children: [
+                    RadioListTile<bool>(
+                      title: const Text('ركاز (دفين وكنوز الجاهلية القديمة)'),
+                      subtitle: const Text('الواجب الشرعي: الخمس (20%) فور استخراجه'),
+                      value: true,
+                      groupValue: _isRikaz,
+                      activeColor: AppColors.emeraldPrimary,
+                      onChanged: (val) {
+                        if (val != null) setState(() => _isRikaz = val);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    RadioListTile<bool>(
+                      title: const Text('معادن مستخرجة (حديد، نحاس، نفط، كبريت)'),
+                      subtitle: const Text('الواجب الشرعي: ربع العشر (2.5%) بنصاب الذهب'),
+                      value: false,
+                      groupValue: _isRikaz,
+                      activeColor: AppColors.emeraldPrimary,
+                      onChanged: (val) {
+                        if (val != null) setState(() => _isRikaz = val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [AppInputFormatters.decimal],
+                decoration: InputDecoration(
+                  labelText: _isRikaz ? 'قيمة الركاز المستخرج الإجمالية' : 'قيمة المعادن المستخرجة الصافية',
+                  hintText: 'مثال: 5000000',
+                  suffixText: zakatProv.currency,
+                  prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.emeraldPrimary),
+                ),
+                validator: AppValidators.requiredPositiveNumber(
+                  _isRikaz ? 'قيمة الركاز المستخرج' : 'قيمة المعادن المستخرجة',
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              ElevatedButton.icon(
+                onPressed: _calculate,
+                icon: const Icon(Icons.calculate),
+                label: const Text('احسب الزكاة الواجبة', style: TextStyle(fontSize: 18)),
+              ),
+              const SizedBox(height: 24),
+
+              // Unified Result Card
+              if (_isCalculated && _result != null)
+                ZakatResultCard(
+                  result: _result!,
+                  typeName: _isRikaz ? 'زكاة الركاز (الخمس)' : 'زكاة المعادن المستخرجة',
+                  categoryKey: 'minerals',
+                  totalWealth: double.tryParse(AppInputFormatters.normalizeArabicNumbers(_amountController.text.trim())) ?? 0.0,
+                  currency: zakatProv.currency,
+                  appliedPrice: _result?.appliedPrice,
+                  pdfFileName: 'zakat_minerals_receipt.pdf',
+                  pdfTitle: 'إقرار وتفصيل حساب زكاة الركاز والمعادن',
+                ),
+            ],
+          ),
         ),
       ),
     );

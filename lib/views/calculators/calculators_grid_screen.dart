@@ -1,29 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
-import 'money_calc_screen.dart';
-import 'gold_calc_screen.dart';
-import 'silver_calc_screen.dart';
-import 'trade_calc_screen.dart';
-import 'crops_calc_screen.dart';
-import 'livestock_calc_screen.dart';
-import 'minerals_screen.dart';
-import 'fields_calc_screen.dart';
-
-class ZakatCategoryItem {
-  final String title;
-  final String description;
-  final String imagePath;
-  final Widget targetScreen;
-  final Color badgeColor;
-
-  ZakatCategoryItem({
-    required this.title,
-    required this.description,
-    required this.imagePath,
-    required this.targetScreen,
-    this.badgeColor = AppColors.emeraldPrimary,
-  });
-}
+import '../../core/constants/zakat_categories.dart';
+import '../../core/widgets/category_icon_badge.dart';
 
 class CalculatorsGridScreen extends StatefulWidget {
   const CalculatorsGridScreen({super.key});
@@ -33,158 +11,239 @@ class CalculatorsGridScreen extends StatefulWidget {
 }
 
 class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _selectedGroup = 'all';
 
-  List<ZakatCategoryItem> _getAllItems() {
-    return [
-      ZakatCategoryItem(
-        title: 'زكاة المال والنقود',
-        description: 'حساب زكاة السيولة النقدية والودائع البنكية والمدخرات',
-        imagePath: 'assets/images/money.png',
-        targetScreen: const MoneyCalcScreen(),
-      ),
-      ZakatCategoryItem(
-        title: 'زكاة الذهب',
-        description: 'حساب زكاة سبائك وحلي الذهب بعيارات 24، 21، 18',
-        imagePath: 'assets/images/gold.png',
-        targetScreen: const GoldCalcScreen(),
-      ),
-      ZakatCategoryItem(
-        title: 'زكاة الفضة',
-        description: 'حساب زكاة الفضة والسبائك بنصاب 595 جراماً',
-        imagePath: 'assets/images/silver.png',
-        targetScreen: const SilverCalcScreen(),
-      ),
-      ZakatCategoryItem(
-        title: 'عروض التجارة والصناعة',
-        description: 'حساب زكاة البضائع والمؤسسات والمحلات التجارية',
-        imagePath: 'assets/images/trade.png',
-        targetScreen: const TradeCalcScreen(),
-      ),
-      ZakatCategoryItem(
-        title: 'زكاة الحبوب والثمار',
-        description: 'حساب زكاة الزروع والمحاصيل بالري الطبيعي والصناعي',
-        imagePath: 'assets/images/crops.png',
-        targetScreen: const CropsCalcScreen(),
-      ),
-      ZakatCategoryItem(
-        title: 'زكاة الإبل',
-        description: 'حساب زكاة الإبل السائمة بنصاب يبدأ من 5 رؤوس',
-        imagePath: 'assets/images/camel.png',
-        targetScreen: const LivestockCalcScreen(initialTabIndex: 0),
-      ),
-      ZakatCategoryItem(
-        title: 'زكاة البقر والجاموس',
-        description: 'حساب زكاة البقر السائم بنصاب يبدأ من 30 بقرة',
-        imagePath: 'assets/images/cow.png',
-        targetScreen: const LivestockCalcScreen(initialTabIndex: 1),
-      ),
-      ZakatCategoryItem(
-        title: 'زكاة الغنم والماعز',
-        description: 'حساب زكاة الضأن والماعز السائم بنصاب 40 شاة',
-        imagePath: 'assets/images/goat.png',
-        targetScreen: const LivestockCalcScreen(initialTabIndex: 2),
-      ),
-      ZakatCategoryItem(
-        title: 'الركاز والمعادن',
-        description: 'ما يجب في دفين الجاهلية (الخمس) والمعادن المستخرجة',
-        imagePath: 'assets/images/minral.png',
-        targetScreen: const MineralsScreen(),
-      ),
-      ZakatCategoryItem(
-        title: 'زكاة المستغلات',
-        description: 'حساب ريع العقارات المؤجرة والمصانع وسيارات الأجرة',
-        imagePath: 'assets/images/fields.png',
-        targetScreen: const FieldsCalcScreen(),
-      ),
-    ];
+  final List<Map<String, String>> _filterGroups = [
+    {'id': 'all', 'label': 'جميع الحاسبات'},
+    {'id': 'money', 'label': 'النقود والذهب'},
+    {'id': 'livestock', 'label': 'الأنعام والمواشي'},
+    {'id': 'crops', 'label': 'الحبوب والزروع'},
+    {'id': 'activities', 'label': 'الفطر والتجارة'},
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final items = _getAllItems().where((item) {
-      return item.title.contains(_searchQuery) || item.description.contains(_searchQuery);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final filteredItems = appZakatCategories.where((item) {
+      final matchesQuery = _searchQuery.isEmpty ||
+          item.title.contains(_searchQuery) ||
+          item.description.contains(_searchQuery) ||
+          item.shortTitle.contains(_searchQuery);
+
+      final matchesGroup = _selectedGroup == 'all' || item.group == _selectedGroup;
+
+      return matchesQuery && matchesGroup;
     }).toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('حاسبات الزكاة الشاملة'),
+        centerTitle: true,
       ),
       body: Column(
         children: [
-          // Search box
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'ابحث عن نوع الزكاة...',
-                prefixIcon: const Icon(Icons.search, color: AppColors.emeraldPrimary),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => setState(() => _searchQuery = ''),
-                      )
-                    : null,
-              ),
-              onChanged: (val) => setState(() => _searchQuery = val.trim()),
+          // Search & Filter Header
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'ابحث عن نوع الزكاة أو النصاب...',
+                    prefixIcon: const Icon(Icons.search, color: AppColors.emeraldPrimary),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                ),
+                const SizedBox(height: 10),
+                // Horizontal Filter Chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _filterGroups.map((group) {
+                      final isSelected = _selectedGroup == group['id'];
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: ChoiceChip(
+                          label: Text(group['label']!),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() => _selectedGroup = group['id']!);
+                            }
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
             ),
           ),
 
-          // Grid
+          // 2-Column Responsive Grid View
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => item.targetScreen),
-                      );
-                    },
+            child: filteredItems.isEmpty
+                ? Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 60,
-                            height: 60,
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.emeraldSubtle,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Image.asset(item.imagePath, fit: BoxFit.contain),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.title,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  item.description,
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                ),
-                              ],
+                          Icon(Icons.search_off, size: 56, color: Colors.grey.shade400),
+                          const SizedBox(height: 12),
+                          Text(
+                            'لم يتم العثور على حاسبة تطابق "$_searchQuery"',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade600,
                             ),
                           ),
-                          const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                          const SizedBox(height: 6),
+                          Text(
+                            'جرّب البحث بكلمة أخرى مثل "ذهب"، "فطر"، "غنم"، "زروع"',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          ),
                         ],
                       ),
                     ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final crossAxisCount = constraints.maxWidth > 650 ? 3 : 2;
+                      final aspectRatio = constraints.maxWidth > 650 ? 1.15 : 0.98;
+
+                      return GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: aspectRatio,
+                        ),
+                        itemCount: filteredItems.length,
+                        itemBuilder: (context, index) {
+                          final item = filteredItems[index];
+                          return Card(
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                color: isDark
+                                    ? AppColors.emeraldPrimary.withValues(alpha: 0.25)
+                                    : AppColors.emeraldPrimary.withValues(alpha: 0.12),
+                              ),
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (context) => item.targetScreen),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    // Icon and Nisab Badge
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        CategoryIconBadge(
+                                          imagePath: item.imagePath,
+                                          size: 46,
+                                          iconSize: 26,
+                                          padding: 6,
+                                          borderRadius: 12,
+                                        ),
+                                        if (item.nisabBadge.isNotEmpty)
+                                          Flexible(
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? AppColors.emeraldPrimary.withValues(alpha: 0.22)
+                                                    : AppColors.emeraldSubtle,
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: AppColors.emeraldPrimary.withValues(alpha: 0.3),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                item.nisabBadge,
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? AppColors.goldLight : AppColors.emeraldPrimary,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const Spacer(),
+                                    // Title
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        item.title,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13.5,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // Description
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        item.description,
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                          height: 1.3,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
