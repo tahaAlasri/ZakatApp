@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.admin == true || 
+         request.auth.token.role == 'admin' ||
+         request.auth.token.email.matches('.*@zakat\\.gov\\.ye$'));
+    }
+
+    // --- 1. App Configuration & Zakat Prices ---
+    // Anyone can read current prices and staple food indices. Only admins can update.
+    match /app_config/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- 2. Official Announcements & News ---
+    // Public read for official announcements, admin-only write.
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- 3. Assistance Requests (طلبات المساعدة) ---
+    // Strict privacy: user can only read and create their own requests; admins can review and update status.
+    match /assistance_requests/{requestId} {
+      allow create: if isAuthenticated() && 
+        (request.resource.data.userId == request.auth.uid || 
+         request.resource.data.userEmail == request.auth.token.email ||
+         request.resource.data.email == request.auth.token.email);
+      
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || 
+         resource.data.userEmail == request.auth.token.email || 
+         resource.data.email == request.auth.token.email || 
+         isAdmin());
+
+      allow update, delete: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // --- 4. User Profiles ---
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // --- 5. Default Deny ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

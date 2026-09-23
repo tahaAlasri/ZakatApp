@@ -10,6 +10,7 @@ import '../../views/calculators/minerals_screen.dart';
 import '../../views/calculators/fields_calc_screen.dart';
 import '../../views/calculators/fitr_calc_screen.dart';
 import '../../views/calculators/stocks_calc_screen.dart';
+import '../../views/calculators/crypto_calc_screen.dart';
 
 class ZakatCategoryItem {
   final String title;
@@ -138,9 +139,18 @@ const List<ZakatCategoryItem> appZakatCategories = [
     title: 'زكاة الأسهم والاستثمار',
     shortTitle: 'زكاة الأسهم',
     description: 'حساب زكاة أسهم المضاربة والاستثمار طويل الأجل والصناديق',
-    imagePath: 'assets/images/trade.png',
+    imagePath: 'assets/images/stocks.png',
     targetScreen: StocksCalcScreen(),
-    nisabBadge: 'نصاب الذهب 2.5%',
+    nisabBadge: 'نصاب الذهب',
+    group: 'activities',
+  ),
+  ZakatCategoryItem(
+    title: 'العملات الرقمية والمشفرة',
+    shortTitle: 'العملات الرقمية',
+    description: 'حساب زكاة البيتكوين والعملات المشفرة',
+    imagePath: 'assets/images/crypto.png',
+    targetScreen: CryptoCalcScreen(),
+    nisabBadge: 'نصاب الذهب',
     group: 'activities',
   ),
 ];

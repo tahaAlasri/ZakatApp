@@ -157,6 +157,8 @@ class MyRequestsScreen extends StatelessWidget {
                 final currentStep = _getStepIndex(req.status);
                 final isRejected = req.status == 'rejected' || req.status == 'مرفوض';
 
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
                   elevation: 2,
@@ -174,23 +176,26 @@ class MyRequestsScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
+                                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.tag, size: 14, color: Colors.grey),
+                                  Icon(Icons.tag, size: 14, color: isDark ? AppColors.goldAccent : AppColors.emeraldPrimary),
                                   const SizedBox(width: 4),
                                   Text(
                                     req.referenceCode ?? req.id,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
                                       fontFamily: 'Courier',
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
                                     ),
                                   ),
                                 ],
@@ -231,7 +236,7 @@ class MyRequestsScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           'تاريخ التقديم: ${DateFormat('yyyy/MM/dd - hh:mm a', 'ar').format(req.createdAt)}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                         ),
                         const SizedBox(height: 14),
 
@@ -239,9 +244,9 @@ class MyRequestsScreen extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
+                            color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.5) : Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade200),
+                            border: Border.all(color: isDark ? const Color(0xFF1E293B) : Colors.grey.shade200),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -252,16 +257,18 @@ class MyRequestsScreen extends StatelessWidget {
                                 isPassed: currentStep >= 1,
                                 isCurrent: currentStep == 1,
                                 color: AppColors.emeraldPrimary,
+                                isDark: isDark,
                               ),
-                              _buildStepLine(isPassed: currentStep >= 2),
+                              _buildStepLine(isPassed: currentStep >= 2, isDark: isDark),
                               _buildStepIndicator(
                                 stepNum: 2,
                                 label: 'قيد الفحص',
                                 isPassed: currentStep >= 2,
                                 isCurrent: currentStep == 2,
                                 color: Colors.blue,
+                                isDark: isDark,
                               ),
-                              _buildStepLine(isPassed: currentStep >= 3),
+                              _buildStepLine(isPassed: currentStep >= 3, isDark: isDark),
                               _buildStepIndicator(
                                 stepNum: 3,
                                 label: isRejected ? 'مرفوض' : 'الاعتماد',
@@ -269,14 +276,16 @@ class MyRequestsScreen extends StatelessWidget {
                                 isCurrent: currentStep == 3,
                                 color: isRejected ? AppColors.error : AppColors.success,
                                 icon: isRejected ? Icons.close : null,
+                                isDark: isDark,
                               ),
-                              _buildStepLine(isPassed: currentStep >= 4),
+                              _buildStepLine(isPassed: currentStep >= 4, isDark: isDark),
                               _buildStepIndicator(
                                 stepNum: 4,
                                 label: 'الصرف',
                                 isPassed: currentStep >= 4,
                                 isCurrent: currentStep == 4,
                                 color: AppColors.emeraldPrimary,
+                                isDark: isDark,
                               ),
                             ],
                           ),
@@ -377,6 +386,7 @@ class MyRequestsScreen extends StatelessWidget {
     required bool isPassed,
     required bool isCurrent,
     required Color color,
+    required bool isDark,
     IconData? icon,
   }) {
     return Column(
@@ -386,7 +396,7 @@ class MyRequestsScreen extends StatelessWidget {
           height: 26,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isPassed ? color : Colors.grey.shade300,
+            color: isPassed ? color : (isDark ? const Color(0xFF334155) : Colors.grey.shade300),
             border: isCurrent ? Border.all(color: AppColors.goldAccent, width: 2) : null,
           ),
           child: Center(
@@ -396,7 +406,11 @@ class MyRequestsScreen extends StatelessWidget {
                     ? const Icon(Icons.check, size: 14, color: Colors.white)
                     : Text(
                         '$stepNum',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          fontWeight: FontWeight.bold,
+                        ),
                       )),
           ),
         ),
@@ -406,19 +420,21 @@ class MyRequestsScreen extends StatelessWidget {
           style: TextStyle(
             fontSize: 10,
             fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-            color: isPassed ? Colors.black87 : Colors.grey,
+            color: isPassed
+                ? (isDark ? Colors.white70 : Colors.black87)
+                : (isDark ? Colors.grey.shade500 : Colors.grey),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStepLine({required bool isPassed}) {
+  Widget _buildStepLine({required bool isPassed, required bool isDark}) {
     return Expanded(
       child: Container(
         height: 2,
         margin: const EdgeInsets.only(bottom: 16),
-        color: isPassed ? AppColors.emeraldPrimary : Colors.grey.shade300,
+        color: isPassed ? AppColors.emeraldPrimary : (isDark ? const Color(0xFF334155) : Colors.grey.shade300),
       ),
     );
   }

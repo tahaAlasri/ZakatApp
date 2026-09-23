@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../models/zakat_record.dart';
 import '../../models/favorite_item.dart';
 import '../../models/assistance_request.dart';
+import '../../models/hawl_item.dart';
 import '../services/auth_service.dart';
 import '../services/encryption_service.dart';
 
@@ -10,10 +11,12 @@ class LocalDbService {
   static const String zakatRecordsBoxName = 'zakat_records_box';
   static const String favoritesBoxName = 'favorites_box';
   static const String assistanceRequestsBoxName = 'assistance_requests_box';
+  static const String hawlItemsBoxName = 'hawl_items_box';
 
   static Box? _zakatBox;
   static Box? _favoritesBox;
   static Box? _requestsBox;
+  static Box? _hawlBox;
 
   static Future<void> init() async {
     try {
@@ -24,6 +27,7 @@ class LocalDbService {
     await _ensureZakatBoxOpen();
     _favoritesBox = await Hive.openBox(favoritesBoxName);
     await _ensureRequestsBoxOpen();
+    await _ensureHawlBoxOpen();
     await applyDataRetentionPolicy();
   }
 
@@ -53,6 +57,15 @@ class LocalDbService {
     } catch (_) {
       _requestsBox = await Hive.openBox(assistanceRequestsBoxName);
     }
+  }
+
+  static Future<void> _ensureHawlBoxOpen() async {
+    if (_hawlBox != null && _hawlBox!.isOpen) return;
+    if (Hive.isBoxOpen(hawlItemsBoxName)) {
+      _hawlBox = Hive.box(hawlItemsBoxName);
+      return;
+    }
+    _hawlBox = await Hive.openBox(hawlItemsBoxName);
   }
 
   // --- ZAKAT RECORDS ---
@@ -214,6 +227,41 @@ class LocalDbService {
     }
 
     return keysToDelete.length;
+  }
+
+  // --- HAWL ITEMS ---
+  static Future<void> saveHawlItem(HawlItem item) async {
+    await _ensureHawlBoxOpen();
+    await _hawlBox?.put(item.id, item.toMap());
+  }
+
+  static List<HawlItem> getAllHawlItems() {
+    if (_hawlBox == null) {
+      if (Hive.isBoxOpen(hawlItemsBoxName)) {
+        _hawlBox = Hive.box(hawlItemsBoxName);
+      } else {
+        return [];
+      }
+    }
+    final list = <HawlItem>[];
+    for (var key in _hawlBox!.keys) {
+      final data = _hawlBox!.get(key);
+      if (data != null && data is Map) {
+        list.add(HawlItem.fromMap(data));
+      }
+    }
+    list.sort((a, b) => a.daysRemaining.compareTo(b.daysRemaining));
+    return list;
+  }
+
+  static Future<void> deleteHawlItem(String id) async {
+    await _ensureHawlBoxOpen();
+    await _hawlBox?.delete(id);
+  }
+
+  static Future<void> clearAllHawlItems() async {
+    await _ensureHawlBoxOpen();
+    await _hawlBox?.clear();
   }
 }
 

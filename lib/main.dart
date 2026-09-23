@@ -10,6 +10,7 @@ import 'core/database/preferences_service.dart';
 import 'core/database/local_db_service.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/permission_service.dart';
 import 'core/services/cloud_sync_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
@@ -40,15 +41,28 @@ void main() async {
   await LocalDbService.init();
   await AuthService.init();
   await NotificationService.init();
+  try {
+    await PermissionService.requestNotificationPermission();
+  } catch (e) {
+    debugPrint('Permission error on start: $e');
+  }
   final cloudSync = CloudSyncService();
   await cloudSync.init();
+
+  final zakatProvider = ZakatProvider();
+
+  // مزامنة تلقائية: عند تحديث الأسعار من لوحة التحكم في CloudSyncService،
+  // يتم تلقائياً إعادة تحميل الأسعار في ZakatProvider
+  cloudSync.addListener(() {
+    zakatProvider.reloadPricesFromPreferences();
+  });
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ZakatProvider()),
+        ChangeNotifierProvider.value(value: zakatProvider),
         ChangeNotifierProvider(create: (_) => FavoritesProvider()),
         ChangeNotifierProvider(create: (_) => HawlProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),

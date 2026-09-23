@@ -18,7 +18,8 @@ class MineralsScreen extends StatefulWidget {
 class _MineralsScreenState extends State<MineralsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
-  bool _isRikaz = true; // true = الركاز (20%), false = المعادن (2.5%)
+  bool _isRikaz = true; // true = الركاز (20%), false = المعادن
+  double _mineralRate = 0.20; // 20% الخمس (معتمد الهادوية والزيدية)
   ZakatCalculationResult? _result;
   bool _isCalculated = false;
 
@@ -37,6 +38,7 @@ class _MineralsScreenState extends State<MineralsScreen> {
     final res = zakatProv.calculateMineralsZakat(
       totalExtractedValue: amount,
       isRikaz: _isRikaz,
+      customMineralRate: _isRikaz ? 0.20 : _mineralRate,
     );
 
     setState(() {
@@ -133,7 +135,7 @@ class _MineralsScreenState extends State<MineralsScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'الركاز (دفين الجاهلية) يجب فيه الخمس (20%) فور استخراجه دون اشتراط حول أو نصاب، والمعادن المستخرجة من الأرض يجب فيها ربع العشر (2.5%) عند بلوغ النصاب الشرعي (85 جرام ذهب خالص عيار 24).',
+                              'الركاز (دفين الجاهلية) يجب فيه الخُمس (20%) فور استخراجه دون اشتراط حول أو نصاب. والمعادن المستخرجة من الأرض معتمد فقه الهادوية والزيدية فيها الخُمس (20%) كركاز («وفي المعادن الخُمس» متن الأزهار) مع بلوغ النصاب (85 جرام ذهب خالص).',
                               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                             ),
                           ],
@@ -156,7 +158,7 @@ class _MineralsScreenState extends State<MineralsScreen> {
                   children: [
                     RadioListTile<bool>(
                       title: const Text('ركاز (دفين وكنوز الجاهلية القديمة)'),
-                      subtitle: const Text('الواجب الشرعي: الخمس (20%) فور استخراجه'),
+                      subtitle: const Text('الواجب الشرعي: الخُمس (20%) فور استخراجه بلا حول ولا نصاب'),
                       value: true,
                       groupValue: _isRikaz,
                       activeColor: AppColors.emeraldPrimary,
@@ -166,8 +168,8 @@ class _MineralsScreenState extends State<MineralsScreen> {
                     ),
                     const Divider(height: 1),
                     RadioListTile<bool>(
-                      title: const Text('معادن مستخرجة (حديد، نحاس، نفط، كبريت)'),
-                      subtitle: const Text('الواجب الشرعي: ربع العشر (2.5%) بنصاب الذهب'),
+                      title: const Text('معادن مستخرجة (حديد، نحاس، نفط، ملح، كبريت)'),
+                      subtitle: const Text('معتمد الهادوية والزيدية: الخُمس (20%) بنصاب 85 جرام ذهب خالص'),
                       value: false,
                       groupValue: _isRikaz,
                       activeColor: AppColors.emeraldPrimary,
@@ -178,6 +180,60 @@ class _MineralsScreenState extends State<MineralsScreen> {
                   ],
                 ),
               ),
+              if (!_isRikaz) ...[
+                const SizedBox(height: 12),
+                Card(
+                  color: AppColors.emeraldPrimary.withValues(alpha: 0.05),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'نسبة زكاة المعادن وفق التكييف الفقهي ومؤنة الاستخراج:',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<double>(
+                          value: _mineralRate,
+                          isExpanded: true,
+                          isDense: true,
+                          decoration: const InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 0.20,
+                              child: Text(
+                                'الخُمس (20%) - معتمد الهادوية والزيدية (متن الأزهار)',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 0.10,
+                              child: Text(
+                                'نصف الخُمس (10%) - بمؤنة استخراج باهظة وآلات',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 0.025,
+                              child: Text(
+                                'ربع العُشر (2.5%) - وفق مذهب الجمهور بكلفة عالية',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setState(() => _mineralRate = val);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
 
               TextFormField(

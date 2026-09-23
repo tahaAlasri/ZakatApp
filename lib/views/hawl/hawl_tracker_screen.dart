@@ -6,6 +6,7 @@ import '../../core/services/pdf_service.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/hijri_date_picker.dart';
 import '../../core/utils/auth_guard.dart';
+import '../../models/hawl_item.dart';
 import '../../providers/hawl_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
@@ -33,85 +34,342 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
     });
   }
 
-  void _pickStartDate(BuildContext context) async {
+  static const List<Map<String, String>> _categories = [
+    {'key': 'money', 'name': 'النقود والمدخرات'},
+    {'key': 'gold', 'name': 'الذهب والفضة'},
+    {'key': 'trade', 'name': 'عروض التجارة'},
+    {'key': 'crypto', 'name': 'العملات الرقمية المشفرة'},
+    {'key': 'stocks', 'name': 'الأسهم والاستثمارات'},
+    {'key': 'livestock', 'name': 'الأنعام والمواشي'},
+    {'key': 'crops', 'name': 'الزروع والثمار'},
+    {'key': 'other', 'name': 'أصول وأموال أخرى'},
+  ];
+
+  Future<void> _openAddEditHawlDialog(BuildContext context, [HawlItem? existing]) async {
     final authProv = Provider.of<AuthProvider>(context, listen: false);
     if (!authProv.isAuthenticated) {
       final isAuth = await AuthGuard.requireAuth(
         context,
         title: 'حساب الحول الذكي',
-        message: 'يتطلب ضبط متتبع الحول الهجري تسجيل الدخول لحفظ تاريخ بلوغ النصاب وتفعيل التنبيهات الشرعية باسمك.',
+        message: 'يتطلب متتبع الحول الهجري تسجيل الدخول لحفظ تاريخ النصاب وتفعيل التنبيهات الشرعية لأموالك.',
         icon: Icons.timer_outlined,
       );
       if (!isAuth) return;
       if (!context.mounted) return;
     }
 
-    final hawlProv = Provider.of<HawlProvider>(context, listen: false);
-    final picked = await showHijriDatePicker(
-      context: context,
-      initialDate: hawlProv.startDate ?? DateTime.now(),
-      title: 'اختر تاريخ بلوغ النصاب بالهجري',
+    final titleController = TextEditingController(text: existing?.title ?? '');
+    final amountController = TextEditingController(
+      text: existing?.estimatedAmount != null ? existing!.estimatedAmount!.toStringAsFixed(0) : '',
     );
+    final notesController = TextEditingController(text: existing?.notes ?? '');
+    String selectedCategoryKey = existing?.categoryKey ?? 'money';
+    DateTime selectedDate = existing?.startDate ?? DateTime.now();
 
-    if (picked != null) {
-      if (!context.mounted) return;
-      final hawlProv = Provider.of<HawlProvider>(context, listen: false);
-      final notifProv = Provider.of<NotificationProvider>(context, listen: false);
+    final formKey = GlobalKey<FormState>();
 
-      await hawlProv.setHawlStartDate(picked);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+            final categoryName = _categories.firstWhere(
+              (c) => c['key'] == selectedCategoryKey,
+              orElse: () => _categories.first,
+            )['name']!;
 
-      // Request notification permission & schedule smart background alerts
-      await PermissionService.requestNotificationPermission();
-      if (hawlProv.isHawlCompleted) {
-        await notifProv.notifyHawlCompleted(
-          dueDateStr: AppFormatters.formatDate(hawlProv.expectedDueDate!),
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              contentPadding: EdgeInsets.zero,
+              content: Container(
+                width: 420,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  color: isDark ? AppColors.darkSurface : Colors.white,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        decoration: const BoxDecoration(
+                          gradient: AppColors.primaryGradient,
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              existing == null ? Icons.add_alarm_rounded : Icons.edit_calendar_rounded,
+                              color: AppColors.goldAccent,
+                              size: 26,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                existing == null ? 'إضافة حول لوعاء مال جديد' : 'تعديل بيانات الحول',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Form Body
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Asset Title Field
+                              TextFormField(
+                                controller: titleController,
+                                decoration: InputDecoration(
+                                  labelText: 'اسم وعاء المال أو الحساب *',
+                                  hintText: 'مثال: حساب التوفير، ذهب عيار 21، متجر الأقمشة',
+                                  prefixIcon: const Icon(Icons.label_outline, color: AppColors.emeraldPrimary),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'يرجى إدخال اسم الوعاء أو الحساب';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Category Dropdown
+                              DropdownButtonFormField<String>(
+                                value: selectedCategoryKey,
+                                isExpanded: true,
+                                isDense: true,
+                                decoration: InputDecoration(
+                                  labelText: 'نوع الأصل الزكوي',
+                                  prefixIcon: const Icon(Icons.category_outlined, color: AppColors.emeraldPrimary),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                items: _categories.map((c) {
+                                  return DropdownMenuItem<String>(
+                                    value: c['key'],
+                                    child: Text(
+                                      c['name']!,
+                                      style: const TextStyle(fontSize: 14),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setDialogState(() => selectedCategoryKey = val);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Estimated Amount Field (Optional)
+                              TextFormField(
+                                controller: amountController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: InputDecoration(
+                                  labelText: 'المبلغ / القيمة التقديرية (اختياري)',
+                                  hintText: 'مثال: 2500000',
+                                  prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.emeraldPrimary),
+                                  suffixText: 'ر.ي',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Start Date Selector (Hijri Picker)
+                              InkWell(
+                                onTap: () async {
+                                  final picked = await showHijriDatePicker(
+                                    context: dialogCtx,
+                                    initialDate: selectedDate,
+                                    title: 'اختر تاريخ بلوغ النصاب بالهجري',
+                                  );
+                                  if (picked != null) {
+                                    setDialogState(() => selectedDate = picked);
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: AppColors.emeraldPrimary.withValues(alpha: 0.5)),
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: AppColors.emeraldSubtle.withValues(alpha: 0.3),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.calendar_month, color: AppColors.emeraldPrimary),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'تاريخ بدء الحول (بلوغ النصاب):',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              AppFormatters.formatDate(selectedDate),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                                color: AppColors.emeraldPrimary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.emeraldPrimary),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Notes Field (Optional)
+                              TextFormField(
+                                controller: notesController,
+                                maxLines: 2,
+                                decoration: InputDecoration(
+                                  labelText: 'ملاحظات إضافية (اختياري)',
+                                  hintText: 'أي تفاصيل عن مصدر المال أو الحساب...',
+                                  prefixIcon: const Icon(Icons.notes, color: AppColors.emeraldPrimary),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Dialog Actions
+                      Padding(
+                        padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dialogCtx),
+                              child: const Text('إلغاء'),
+                            ),
+                            const SizedBox(width: 10),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                if (!formKey.currentState!.validate()) return;
+
+                                final hawlProv = Provider.of<HawlProvider>(context, listen: false);
+                                final notifProv = Provider.of<NotificationProvider>(context, listen: false);
+
+                                final parsedAmount = double.tryParse(amountController.text.trim());
+                                final newItem = HawlItem(
+                                  id: existing?.id ?? 'hawl_${DateTime.now().millisecondsSinceEpoch}',
+                                  title: titleController.text.trim(),
+                                  categoryKey: selectedCategoryKey,
+                                  categoryName: categoryName,
+                                  startDate: selectedDate,
+                                  estimatedAmount: parsedAmount,
+                                  notes: notesController.text.trim().isNotEmpty ? notesController.text.trim() : null,
+                                );
+
+                                if (existing == null) {
+                                  await hawlProv.addHawlItem(newItem);
+                                } else {
+                                  await hawlProv.updateHawlItem(newItem);
+                                }
+
+                                // Schedule smart alerts
+                                await PermissionService.requestNotificationPermission();
+                                if (newItem.isHawlCompleted) {
+                                  await notifProv.notifyHawlCompleted(
+                                    dueDateStr: newItem.hijriDueDateStr,
+                                  );
+                                } else {
+                                  await notifProv.sendHawlAlert(
+                                    daysRemaining: newItem.daysRemaining,
+                                    dueDateStr: newItem.hijriDueDateStr,
+                                  );
+                                  await notifProv.scheduleHawlMilestones(
+                                    dueDate: newItem.expectedDueDate,
+                                    dueDateStr: newItem.hijriDueDateStr,
+                                  );
+                                }
+
+                                if (!dialogCtx.mounted) return;
+                                Navigator.pop(dialogCtx);
+
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      existing == null
+                                          ? 'تمت إضافة الحول بنجاح وتفعيل التنبيهات المجدولة!'
+                                          : 'تم تحديث بيانات الحول بنجاح!',
+                                    ),
+                                    backgroundColor: AppColors.success,
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.emeraldPrimary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              icon: const Icon(Icons.check, size: 18),
+                              label: Text(
+                                existing == null ? 'حفظ وتفعيل الحول' : 'تحديث الحول',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         );
-      } else {
-        await notifProv.sendHawlAlert(
-          daysRemaining: hawlProv.daysRemaining,
-          dueDateStr: AppFormatters.formatDate(hawlProv.expectedDueDate!),
-        );
-
-        // Schedule background reminders (30 days before, 7 days before, and due date)
-        if (hawlProv.expectedDueDate != null) {
-          await notifProv.scheduleHawlMilestones(
-            dueDate: hawlProv.expectedDueDate!,
-            dueDateStr: AppFormatters.formatDate(hawlProv.expectedDueDate!),
-          );
-        }
-      }
-
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            hawlProv.isHawlCompleted
-                ? 'تم ضبط تاريخ النصاب، وتم إرسال إشعار وجوب الزكاة اليوم إلى شريط التنبيهات!'
-                : 'تم ضبط تاريخ النصاب وتفعيل الجدولة التلقائية للتنبيهات (قبل شهر، أسبوع، ويوم الحلول)!',
-          ),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    }
+      },
+    );
   }
 
-  void _shareHawlStatus(HawlProvider hawl) {
-    if (hawl.startDate == null) return;
+  void _shareHawlItem(HawlItem item) {
     final buffer = StringBuffer();
     buffer.writeln('⏳ *تذكير الحول الشرعي للزكاة - الهيئة العامة للزكاة* ⏳');
     buffer.writeln('────────────────────');
-    buffer.writeln('📅 *تاريخ بدء الحول:* ${AppFormatters.formatDate(hawl.startDate!)}');
-    buffer.writeln('🎯 *موعد تمام الحول:* ${AppFormatters.formatDate(hawl.expectedDueDate!)}');
-    if (hawl.isHawlCompleted) {
+    buffer.writeln('🏷️ *وعاء المال:* ${item.title} (${item.categoryName})');
+    if (item.estimatedAmount != null) {
+      buffer.writeln('💰 *المبلغ التقديري:* ${AppFormatters.formatCurrency(item.estimatedAmount!)}');
+    }
+    buffer.writeln('📅 *تاريخ بدء الحول:* ${item.hijriStartDateStr}');
+    buffer.writeln('🎯 *موعد تمام الحول:* ${item.hijriDueDateStr}');
+    if (item.isHawlCompleted) {
       buffer.writeln('📢 *الحالة:* اكتمل الحول القمري (354 يوماً) والزكاة واجبة الإخراج الآن! ✅');
     } else {
-      buffer.writeln('⏳ *الأيام المتبقية:* ${hawl.daysRemaining} يوماً');
+      buffer.writeln('⏳ *الأيام المتبقية:* ${item.daysRemaining} يوماً');
     }
     buffer.writeln('────────────────────');
     buffer.writeln('تم الضبط عبر تطبيق *الهيئة العامة للزكاة*');
 
     PdfService.shareLetterText(
-      subject: 'تذكير موعد الحول الشرعي للزكاة',
+      subject: 'تذكير موعد الحول لـ ${item.title}',
       letterText: buffer.toString(),
     );
   }
@@ -119,17 +377,25 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
   @override
   Widget build(BuildContext context) {
     final authProv = Provider.of<AuthProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('متتبع الحول الهجري الذكي'),
+        title: const Text('متتبع الأحوال الهجرية الذكي'),
+        actions: [
+          IconButton(
+            onPressed: () => _openAddEditHawlDialog(context),
+            tooltip: 'إضافة حول لوعاء مال جديد',
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+        ],
       ),
       body: Consumer<HawlProvider>(
         builder: (context, hawl, _) {
-          final hasDate = hawl.startDate != null;
+          final items = hawl.items;
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -179,34 +445,203 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
                       ],
                     ),
                   ),
-                // Info Card
+
+                // Statistics Strip
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: isDark ? AppColors.cardDarkGradient : AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.access_time_filled, color: AppColors.goldAccent, size: 22),
+                              SizedBox(width: 8),
+                              Text(
+                                'متابعة الأحوال المتعددة',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => _openAddEditHawlDialog(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.goldAccent,
+                              foregroundColor: AppColors.emeraldDark,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('إضافة حول', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatBadge(
+                              title: 'إجمالي الأوعية',
+                              value: '${hawl.totalHawlsCount}',
+                              icon: Icons.inventory_2_outlined,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          Container(height: 35, width: 1, color: Colors.white24),
+                          Expanded(
+                            child: _buildStatBadge(
+                              title: 'أحوال جارية',
+                              value: '${hawl.activeHawlsCount}',
+                              icon: Icons.hourglass_top,
+                              color: AppColors.goldLight,
+                            ),
+                          ),
+                          Container(height: 35, width: 1, color: Colors.white24),
+                          Expanded(
+                            child: _buildStatBadge(
+                              title: 'أحوال اكتملت',
+                              value: '${hawl.completedHawlsCount}',
+                              icon: Icons.check_circle_outline,
+                              color: Colors.greenAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // List of Hawl Items
+                if (items.isEmpty)
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        children: [
+                          Icon(Icons.calendar_month, size: 64, color: Colors.grey.shade400),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'لم تسجل أي أحوال بعد',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'في الفقه الإسلامي، لكل مال مستقل بلغ النصاب حوله الخاص. يمكنك إضافة أحوال منفصلة للذهب، والمدخرات، والتجارة، والأصول المشفرة لمتابعة مواقيت وجوب زكاتها بدقة.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.6),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: () => _openAddEditHawlDialog(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.emeraldPrimary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text('تسجيل أول حول لمالك', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'الأوعية والأموال المسجلة (${items.length})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      if (items.length > 1)
+                        TextButton.icon(
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('حذف جميع الأحوال'),
+                                content: const Text('هل أنت متأكد من رغبتك في حذف كافة الأحوال المسجلة وإلغاء تنبيهاتها؟'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                    child: const Text('حذف الكل'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await hawl.resetHawl();
+                              if (!context.mounted) return;
+                              await Provider.of<NotificationProvider>(context, listen: false).cancelHawlAlerts();
+                            }
+                          },
+                          icon: const Icon(Icons.delete_sweep_outlined, color: Colors.red, size: 18),
+                          label: const Text('حذف الكل', style: TextStyle(color: Colors.red, fontSize: 12)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...items.map((item) => _buildHawlCard(context, item, hawl)),
+                ],
+
+                const SizedBox(height: 20),
+
+                // Fiqh Foundation Card
                 Card(
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: AppColors.emeraldPrimary.withValues(alpha: 0.2)),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 55,
-                          height: 55,
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: AppColors.emeraldSubtle,
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.alarm_on_outlined, color: AppColors.emeraldPrimary, size: 30),
+                          child: const Icon(Icons.menu_book_outlined, color: AppColors.emeraldPrimary, size: 24),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         const Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'شرط تمام الحول (354 يوماً)',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                'التأصيل الفقهي لتعدد الأحوال',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'لا تجب الزكاة في الأموال حتى يحول عليها حول قمري كامل من وقت بلوغ النصاب.',
-                                style: TextStyle(fontSize: 12, color: Colors.grey),
+                                'قال أهل العلم: لكل مال مستفاد مستقل بلغ النصاب حوله الخاص من يوم ملكه، ولا يلزم ضم حول مال جديد إلى قديم، ويجوز للمزكي تعجيل إخراج زكاة المال الثاني مع الأول لتوحيد ميعاد الزكاة سنوياً تيسيراً وضبطاً.',
+                                style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.5),
                               ),
                             ],
                           ),
@@ -215,261 +650,312 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-
-                // Main Hawl Display Card
-                if (!hasDate)
-                  Card(
-                    elevation: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.all(28),
-                      child: Column(
-                        children: [
-                          Icon(Icons.calendar_month, size: 64, color: Colors.grey.shade400),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'لم يتم تحديد موعد بدء الحول بعد',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'سجل اليوم الذي بلغت فيه أموالك النصاب ليقوم التطبيق بمتابعة الحول الهجري وتنبيهك آلياً.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.5),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: () => _pickStartDate(context),
-                            icon: const Icon(Icons.add_circle_outline),
-                            label: const Text('تسجيل تاريخ بلوغ النصاب'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else ...[
-                  Card(
-                    elevation: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          // Status Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: hawl.isHawlCompleted ? AppColors.goldAccent.withValues(alpha: 0.2) : AppColors.emeraldSubtle,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: hawl.isHawlCompleted ? AppColors.goldDark : AppColors.emeraldPrimary,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  hawl.isHawlCompleted ? Icons.check_circle : Icons.hourglass_top,
-                                  size: 18,
-                                  color: hawl.isHawlCompleted ? AppColors.goldDark : AppColors.emeraldPrimary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  hawl.isHawlCompleted ? 'اكتمل الحول الشرعي' : 'الحول جارٍ',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: hawl.isHawlCompleted ? AppColors.goldDark : AppColors.emeraldDark,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Days Counter
-                          Text(
-                            hawl.isHawlCompleted ? '0' : '${hawl.daysRemaining}',
-                            style: TextStyle(
-                              fontSize: 54,
-                              fontWeight: FontWeight.bold,
-                              color: hawl.isHawlCompleted ? AppColors.goldDark : AppColors.emeraldPrimary,
-                            ),
-                          ),
-                          Text(
-                            hawl.isHawlCompleted ? 'الزكاة واجبة الإخراج الآن' : 'يوماً متبقياً لاكتمال الحول',
-                            style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Progress Bar
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: LinearProgressIndicator(
-                              value: hawl.progressPercentage,
-                              minHeight: 12,
-                              backgroundColor: Colors.grey.shade200,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                hawl.isHawlCompleted ? AppColors.goldDark : AppColors.emeraldPrimary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'مضى ${(hawl.progressPercentage * 100).toStringAsFixed(1)}% من الحول الهجري (354 يوماً)',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Dates Detail Box
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              Column(
-                                children: [
-                                  const Text('تاريخ البدء', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    AppFormatters.formatDate(hawl.startDate!),
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                  ),
-                                ],
-                              ),
-                              Container(height: 30, width: 1, color: Colors.grey.shade300),
-                              Column(
-                                children: [
-                                  const Text('موعد تمام الحول', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    AppFormatters.formatDate(hawl.expectedDueDate!),
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.goldDark),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          if (hawl.isHawlCompleted) ...[
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  await PermissionService.requestNotificationPermission();
-                                  if (!context.mounted) return;
-                                  final notifProv = Provider.of<NotificationProvider>(context, listen: false);
-                                  await notifProv.notifyHawlCompleted(
-                                    dueDateStr: AppFormatters.formatDate(hawl.expectedDueDate!),
-                                  );
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('تم إرسال إشعار "اليوم موعد إخراج الزكاة" إلى شريط التنبيهات!'),
-                                        backgroundColor: AppColors.success,
-                                      ),
-                                    );
-                                  }
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.goldDark,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.notifications_active, color: Colors.white, size: 20),
-                                label: const Text(
-                                  'إرسال إشعار تذكير: اليوم موعد إخراج الزكاة',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-
-                          // Actions
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () => _pickStartDate(context),
-                                  icon: const Icon(Icons.edit_calendar),
-                                  label: const Text('تعديل التاريخ'),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                onPressed: () => _shareHawlStatus(hawl),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: AppColors.emeraldSubtle,
-                                  foregroundColor: AppColors.emeraldPrimary,
-                                  padding: const EdgeInsets.all(12),
-                                ),
-                                icon: const Icon(Icons.share_outlined),
-                                tooltip: 'مشاركة تذكير الحول عبر واتساب',
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextButton.icon(
-                                  onPressed: () async {
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title: const Row(
-                                          children: [
-                                            Icon(Icons.warning_amber_rounded, color: Colors.red),
-                                            SizedBox(width: 8),
-                                            Text('تأكيد إعادة الضبط'),
-                                          ],
-                                        ),
-                                        content: const Text(
-                                          'هل أنت متأكد من رغبتك في إعادة ضبط متتبع الحول وحذف التاريخ المسجل وإلغاء التنبيهات المجدولة؟',
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(ctx, false),
-                                            child: const Text('إلغاء'),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () => Navigator.pop(ctx, true),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.red,
-                                              foregroundColor: Colors.white,
-                                            ),
-                                            child: const Text('إعادة ضبط'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-
-                                    if (confirm == true) {
-                                      await hawl.resetHawl();
-                                      if (!context.mounted) return;
-                                      await Provider.of<NotificationProvider>(context, listen: false).cancelHawlAlerts();
-                                      if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('تمت إعادة ضبط متتبع الحول وإلغاء التنبيهات بنجاح'),
-                                          behavior: SnackBarBehavior.floating,
-                                          backgroundColor: Colors.black87,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  icon: const Icon(Icons.restart_alt, color: Colors.red),
-                                  label: const Text('إعادة ضبط', style: TextStyle(color: Colors.red)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildStatBadge({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHawlCard(BuildContext context, HawlItem item, HawlProvider hawlProv) {
+    final isCompleted = item.isHawlCompleted;
+    final isNearing = item.isNearingCompletion;
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: isCompleted
+              ? AppColors.goldDark
+              : (isNearing ? AppColors.warning : AppColors.emeraldPrimary.withValues(alpha: 0.2)),
+          width: isCompleted ? 1.5 : 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header Row: Category Icon + Title + Status Badge
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: item.categoryColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(item.icon, color: item.categoryColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Text(
+                            item.categoryName,
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          ),
+                          if (item.estimatedAmount != null) ...[
+                            Text(' • ', style: TextStyle(color: Colors.grey.shade400)),
+                            Text(
+                              AppFormatters.formatCurrency(item.estimatedAmount!),
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.emeraldPrimary),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Status Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isCompleted
+                        ? AppColors.goldAccent.withValues(alpha: 0.2)
+                        : (isNearing ? AppColors.warning.withValues(alpha: 0.2) : AppColors.emeraldSubtle),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isCompleted
+                          ? AppColors.goldDark
+                          : (isNearing ? AppColors.warning : AppColors.emeraldPrimary.withValues(alpha: 0.4)),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isCompleted
+                            ? Icons.check_circle
+                            : (isNearing ? Icons.warning_amber_rounded : Icons.hourglass_top),
+                        size: 13,
+                        color: isCompleted
+                            ? AppColors.goldDark
+                            : (isNearing ? Colors.orange.shade800 : AppColors.emeraldDark),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isCompleted
+                            ? 'اكتمل الحول'
+                            : (isNearing ? 'قريب (${item.daysRemaining} يوماً)' : '${item.daysRemaining} يوماً متبقياً'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isCompleted
+                              ? AppColors.goldDark
+                              : (isNearing ? Colors.orange.shade900 : AppColors.emeraldDark),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 14),
+
+            // Progress bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: item.progressPercentage,
+                minHeight: 8,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  isCompleted ? AppColors.goldDark : (isNearing ? AppColors.warning : AppColors.emeraldPrimary),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Dates Row
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('تاريخ بدء الحول', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const SizedBox(height: 2),
+                      Text(item.hijriStartDateStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
+                  Container(height: 24, width: 1, color: Colors.grey.shade300),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text('موعد تمام الحول', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.hijriDueDateStr,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.goldDark),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            if (item.notes != null && item.notes!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '📝 ${item.notes}',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+              ),
+            ],
+
+            const SizedBox(height: 10),
+
+            // Actions Toolbar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Notify / Send Reminder
+                IconButton(
+                  onPressed: () async {
+                    await PermissionService.requestNotificationPermission();
+                    if (!context.mounted) return;
+                    final notifProv = Provider.of<NotificationProvider>(context, listen: false);
+                    if (item.isHawlCompleted) {
+                      await notifProv.notifyHawlCompleted(dueDateStr: item.hijriDueDateStr);
+                    } else {
+                      await notifProv.sendHawlAlert(
+                        daysRemaining: item.daysRemaining,
+                        dueDateStr: item.hijriDueDateStr,
+                      );
+                    }
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('تم إرسال إشعار تذكير بخصوص "${item.title}" إلى شريط التنبيهات!'),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    }
+                  },
+                  tooltip: 'إرسال تنبيه تجريبي',
+                  icon: const Icon(Icons.notifications_active_outlined, size: 20, color: AppColors.emeraldPrimary),
+                ),
+                // Share
+                IconButton(
+                  onPressed: () => _shareHawlItem(item),
+                  tooltip: 'مشاركة بطاقة الحول',
+                  icon: const Icon(Icons.share_outlined, size: 20, color: AppColors.emeraldPrimary),
+                ),
+                // Renew / Reset this specific Hawl
+                IconButton(
+                  onPressed: () async {
+                    final picked = await showHijriDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      title: 'تجديد الحول: اختر تاريخ بدء الحول الجديد',
+                    );
+                    if (picked != null) {
+                      await hawlProv.resetWithNewStartDate(picked, id: item.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('تم تجديد موعد الحول لـ "${item.title}" بنجاح!'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  tooltip: 'تجديد الحول لعام جديد',
+                  icon: const Icon(Icons.replay_rounded, size: 20, color: AppColors.goldDark),
+                ),
+                // Edit
+                IconButton(
+                  onPressed: () => _openAddEditHawlDialog(context, item),
+                  tooltip: 'تعديل البيانات',
+                  icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
+                ),
+                // Delete
+                IconButton(
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('حذف هذا الحول'),
+                        content: Text('هل أنت متأكد من رغبتك في حذف حول "${item.title}"؟'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                            child: const Text('حذف'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await hawlProv.deleteHawlItem(item.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('تم حذف حول "${item.title}" بنجاح'),
+                            backgroundColor: Colors.black87,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  tooltip: 'حذف الحول',
+                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/zakat_constants.dart';
 
 class PreferencesService {
   static const String _keyThemeMode = 'app_theme_mode'; // 'light' or 'dark'
@@ -14,6 +16,10 @@ class PreferencesService {
   static const String _keySilverPrice = 'custom_silver_price';
   static const String _keyNotificationsEnabled = 'notifications_enabled';
   static const String _keyMarketCity = 'market_city';
+  static const String _keyLastKnownWheatPrice = 'last_known_wheat_price';
+  static const String _keyLastKnownWheatWeight = 'last_known_wheat_weight';
+  static const String _keyLastKnownFitrCash = 'last_known_fitr_cash';
+  static const String _keyCachedBankAccounts = 'cached_bank_accounts_json';
 
   static SharedPreferences? _prefs;
 
@@ -101,5 +107,95 @@ class PreferencesService {
   static String get marketCity => _prefs?.getString(_keyMarketCity) ?? 'sanaa';
   static Future<void> setMarketCity(String city) async {
     await _prefs?.setString(_keyMarketCity, city);
+  }
+
+  // Wheat & Fitr offline cache
+  static double get lastKnownWheatPrice =>
+      _prefs?.getDouble(_keyLastKnownWheatPrice) ?? ZakatConstants.defaultWheatBagPriceYER;
+  static Future<void> setLastKnownWheatPrice(double price) async {
+    await _prefs?.setDouble(_keyLastKnownWheatPrice, price);
+  }
+
+  static double get lastKnownWheatWeight =>
+      _prefs?.getDouble(_keyLastKnownWheatWeight) ?? ZakatConstants.defaultWheatBagWeightKg;
+  static Future<void> setLastKnownWheatWeight(double weight) async {
+    await _prefs?.setDouble(_keyLastKnownWheatWeight, weight);
+  }
+
+  static double get lastKnownFitrCash =>
+      _prefs?.getDouble(_keyLastKnownFitrCash) ?? ZakatConstants.defaultFitrCashYER;
+  static Future<void> setLastKnownFitrCash(double cash) async {
+    await _prefs?.setDouble(_keyLastKnownFitrCash, cash);
+  }
+
+  // Persistent tracking for announcements & request notifications
+  static const String _keySeenAnnouncements = 'seen_announcement_ids';
+  static const String _keyKnownRequestStatuses = 'known_request_statuses_map';
+
+  static List<String> get seenAnnouncementIds =>
+      _prefs?.getStringList(_keySeenAnnouncements) ?? [];
+
+  static Future<void> addSeenAnnouncementId(String id) async {
+    final list = seenAnnouncementIds.toList();
+    if (!list.contains(id)) {
+      list.add(id);
+      await _prefs?.setStringList(_keySeenAnnouncements, list);
+    }
+  }
+
+  static String? getKnownRequestStatus(String reqId) {
+    final raw = _prefs?.getStringList(_keyKnownRequestStatuses) ?? [];
+    for (final item in raw) {
+      final parts = item.split(':::');
+      if (parts.length >= 2 && parts[0] == reqId) {
+        return parts[1];
+      }
+    }
+    return null;
+  }
+
+  static Future<void> setKnownRequestStatus(String reqId, String status) async {
+    final raw = _prefs?.getStringList(_keyKnownRequestStatuses) ?? [];
+    final updated = raw.where((item) => !item.startsWith('$reqId:::')).toList();
+    updated.add('$reqId:::$status');
+    await _prefs?.setStringList(_keyKnownRequestStatuses, updated);
+  }
+
+  static const String _keyKnownAdminReplies = 'known_admin_replies_map';
+
+  static String? getKnownAdminReply(String reqId) {
+    final raw = _prefs?.getStringList(_keyKnownAdminReplies) ?? [];
+    for (final item in raw) {
+      final parts = item.split(':::');
+      if (parts.length >= 2 && parts[0] == reqId) {
+        return parts.sublist(1).join(':::');
+      }
+    }
+    return null;
+  }
+
+  static Future<void> setKnownAdminReply(String reqId, String reply) async {
+    final raw = _prefs?.getStringList(_keyKnownAdminReplies) ?? [];
+    final updated = raw.where((item) => !item.startsWith('$reqId:::')).toList();
+    updated.add('$reqId:::$reply');
+    await _prefs?.setStringList(_keyKnownAdminReplies, updated);
+  }
+
+  // Cached Bank Accounts & Payment Channels from Admin Dashboard
+  static List<Map<String, dynamic>> get cachedBankAccounts {
+    final raw = _prefs?.getString(_keyCachedBankAccounts);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<void> setCachedBankAccounts(List<Map<String, dynamic>> accounts) async {
+    final raw = jsonEncode(accounts);
+    await _prefs?.setString(_keyCachedBankAccounts, raw);
   }
 }

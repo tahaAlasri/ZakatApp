@@ -19,9 +19,11 @@ class GoldCalcScreen extends StatefulWidget {
 class _GoldCalcScreenState extends State<GoldCalcScreen> {
   final _formKey = GlobalKey<FormState>();
   final _gramsController = TextEditingController();
-  final _priceController = TextEditingController();
+  final _silverGramsController = TextEditingController();
   int _selectedKarat = 21;
   bool _isPersonalJewelry = false;
+  bool _madhhabRequiresZakat = true; // المعتمد في فقه الزيدية والهادوية (متن الأزهار)
+  bool _combineWithSilver = false; // ضم الفضة لتكميل النصاب بالأجزاء
   ZakatCalculationResult? _result;
   bool _isCalculated = false;
   bool _isPriceConfirmed = false;
@@ -38,87 +40,55 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
   @override
   void initState() {
     super.initState();
-    final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-    _priceController.text = _getPriceForKarat(_selectedKarat, zakatProv).toStringAsFixed(0);
-    _gramsController.addListener(_onInputChanged);
-    _priceController.addListener(_onInputChanged);
-  }
-
-  void _onInputChanged() {
-    if (_isPriceConfirmed) {
-      setState(() => _isPriceConfirmed = false);
-    } else {
-      setState(() {});
-    }
+    _gramsController.addListener(() {
+      if (_isPriceConfirmed) {
+        setState(() => _isPriceConfirmed = false);
+      } else {
+        setState(() {});
+      }
+    });
+    _silverGramsController.addListener(() {
+      if (_isPriceConfirmed) {
+        setState(() => _isPriceConfirmed = false);
+      } else {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
-    _gramsController.removeListener(_onInputChanged);
-    _priceController.removeListener(_onInputChanged);
     _gramsController.dispose();
-    _priceController.dispose();
+    _silverGramsController.dispose();
     super.dispose();
   }
 
-  Future<void> _calculate() async {
+  void _calculate() {
     if (!_formKey.currentState!.validate()) return;
 
-    final grams = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0;
-    final price = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_priceController.text.trim())) ?? 0.0;
-
     final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-    final pureGrams = grams * (_selectedKarat / 24.0);
-    final isNear = zakatProv.isCloseToNisab(pureGrams, 85.0);
+    final goldGrams = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0;
+    final silverGrams = _combineWithSilver
+        ? (double.tryParse(AppInputFormatters.normalizeArabicNumbers(_silverGramsController.text.trim())) ?? 0.0)
+        : 0.0;
+    final price = _getPriceForKarat(_selectedKarat, zakatProv);
 
-    if (isNear && !_isPriceConfirmed) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.amber),
-              SizedBox(width: 8),
-              Text('تأكيد سعر النصاب'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('الوزن الخالص المعادل (${pureGrams.toStringAsFixed(2)} جرام) قريب جداً من حد النصاب الشرعي (85 جرام ذهب خالص).'),
-              const SizedBox(height: 8),
-              Text('المصدر: ${zakatProv.currentPriceSnapshot.source}'),
-              const SizedBox(height: 8),
-              const Text('نظراً لحساسية النصاب وتقييم الزكاة، يرجى تأكيد مطابقة سعر السوق اليوم لاعتماد الحساب بدقة.'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('مراجعة السعر'),
-            ),
-            ElevatedButton(
-              key: const Key('btn_confirm_gold_price_near_nisab_dialog'),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('تأكيد السعر والمتابعة'),
-            ),
-          ],
-        ),
+    final ZakatCalculationResult res;
+    if (_combineWithSilver && (silverGrams > 0 || goldGrams > 0)) {
+      res = zakatProv.calculateCombinedGoldSilverZakat(
+        goldGrams: goldGrams,
+        goldKarat: _selectedKarat,
+        silverGrams: silverGrams,
       );
-
-      if (confirmed != true) return;
-      setState(() {
-        _isPriceConfirmed = true;
-      });
+    } else {
+      res = zakatProv.calculateGoldZakat(
+        grams: goldGrams,
+        karat: _selectedKarat,
+        pricePerGram: price,
+        isPersonalJewelry: _isPersonalJewelry,
+        madhhabRequiresZakat: _madhhabRequiresZakat,
+      );
     }
-
-    final res = zakatProv.calculateGoldZakat(
-      grams: grams,
-      karat: _selectedKarat,
-      pricePerGram: price,
-      isPersonalJewelry: _isPersonalJewelry,
-    );
 
     setState(() {
       _result = res;
@@ -127,10 +97,12 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم احتساب زكاة الذهب بنجاح'),
+      SnackBar(
+        content: Text(_combineWithSilver
+            ? 'تم احتساب الزكاة بضم الذهب والفضة بالأجزاء وفق المعتمد الفقهي'
+            : 'تم احتساب زكاة الذهب بنجاح وفق التسعيرة الرسمية'),
         backgroundColor: AppColors.emeraldPrimary,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -140,9 +112,11 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
   Widget build(BuildContext context) {
     final zakatProv = Provider.of<ZakatProvider>(context);
     final favProv = Provider.of<FavoritesProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     const favId = 'calc_gold';
     final isFav = favProv.isFavorite(favId);
 
+    final currentKaratPrice = _getPriceForKarat(_selectedKarat, zakatProv);
     final enteredGrams = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0;
     final pureGrams = enteredGrams * (_selectedKarat / 24.0);
     final isNearNisab = enteredGrams > 0 && zakatProv.isCloseToNisab(pureGrams, 85.0);
@@ -163,7 +137,7 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                 FavoriteItem(
                   id: favId,
                   title: 'حاسبة زكاة الذهب',
-                  subtitle: 'حساب زكاة الذهب بمختلف العيارات',
+                  subtitle: 'حساب زكاة الذهب والسبائك والحلي',
                   type: 'calculator',
                   route: '/gold_calc',
                   imagePath: 'assets/images/gold.png',
@@ -195,6 +169,7 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const CategoryIconBadge(
                         imagePath: 'assets/images/gold.png',
@@ -202,7 +177,7 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                         iconSize: 32,
                         padding: 8,
                         borderRadius: 14,
-                        fallbackIcon: Icons.monetization_on,
+                        fallbackIcon: Icons.monetization_on_outlined,
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -215,8 +190,8 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'يحسب المقدار بنسبة 2.5% بعد تحويل وزن الذهب إلى المعيار الخالص (عيار 24).',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              'المقدار الواجب إخراجه هو ربع العشر (2.5%) عند بلوغ النصاب وحولان الحول، وتعتمد الأسعار آلياً من لوحة تحكم الهيئة العامة للزكاة.',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.4),
                             ),
                           ],
                         ),
@@ -227,12 +202,12 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Karat Choice Chips
               const Text(
                 'اختر عيار الذهب:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               const SizedBox(height: 8),
+
               Row(
                 children: [24, 21, 18].map((karat) {
                   final isSelected = _selectedKarat == karat;
@@ -251,7 +226,6 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                           if (selected) {
                             setState(() {
                               _selectedKarat = karat;
-                              _priceController.text = _getPriceForKarat(karat, zakatProv).toStringAsFixed(0);
                             });
                           }
                         },
@@ -259,6 +233,36 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                     ),
                   );
                 }).toList(),
+              ),
+              const SizedBox(height: 16),
+
+              // Official Price Display Card (From Control Panel)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkCard : AppColors.goldLight.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.goldAccent.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.verified, color: AppColors.goldDark, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'سعر جرام الذهب عيار $_selectedKarat المعتمد:',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${currentKaratPrice.toStringAsFixed(0)} ${zakatProv.currency}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.goldDark),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -273,25 +277,16 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                   suffixText: 'جرام',
                   prefixIcon: const Icon(Icons.scale_outlined, color: AppColors.goldDark),
                 ),
-                validator: AppValidators.requiredPositiveNumber('وزن الذهب بالجرام'),
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) return 'يرجى إدخال وزن الذهب';
+                  final v = double.tryParse(AppInputFormatters.normalizeArabicNumbers(val.trim()));
+                  if (v == null || v <= 0) return 'يرجى إدخال قيمة أكبر من الصفر';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
 
-              // Price per gram
-              TextFormField(
-                controller: _priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [AppInputFormatters.decimal],
-                decoration: InputDecoration(
-                  labelText: 'سعر جرام الذهب عيار $_selectedKarat اليوم',
-                  suffixText: zakatProv.currency,
-                  prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.emeraldPrimary),
-                ),
-                validator: AppValidators.requiredPositiveNumber('سعر جرام الذهب'),
-              ),
-              const SizedBox(height: 16),
-
-              // Personal Jewelry Exemption Switch
+              // Personal Jewelry Ruling
               Card(
                 margin: EdgeInsets.zero,
                 shape: RoundedRectangleBorder(
@@ -300,23 +295,146 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
                     color: _isPersonalJewelry ? AppColors.goldAccent : Colors.transparent,
                   ),
                 ),
-                child: SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                  title: const Text(
-                    'ذهب زينة واستعمال شخصي مباح للمرأة',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      title: const Text(
+                        'ذهب زينة واستعمال شخصي للمرأة (حلي مباح)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      subtitle: const Text(
+                        'معتمد فقه الهادوية والزيدية في الأزهار: تجب الزكاة في حلي النساء ولو كان مباحاً للزينة إذا بلغ النصاب.',
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      value: _isPersonalJewelry,
+                      activeThumbColor: AppColors.goldAccent,
+                      onChanged: (val) {
+                        setState(() {
+                          _isPersonalJewelry = val;
+                        });
+                      },
+                    ),
+                    if (_isPersonalJewelry) ...[
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: DropdownButtonFormField<bool>(
+                          value: _madhhabRequiresZakat,
+                          isExpanded: true,
+                          isDense: true,
+                          decoration: const InputDecoration(
+                            labelText: 'المعتمد الفقهي لحلي الزينة الشخصية:',
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: true,
+                              child: Text(
+                                'معتمد الهادوية والزيدية (الأزهار) والحنفية: تجب الزكاة',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: false,
+                              child: Text(
+                                'مذهب الجمهور (الشافعية والمالكية والحنابلة): معفى من الزكاة',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setState(() => _madhhabRequiresZakat = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Combine Gold with Silver (ضم الذهب إلى الفضة بالأجزاء)
+              Card(
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: _combineWithSilver ? AppColors.goldAccent : Colors.transparent,
                   ),
-                  subtitle: const Text(
-                    'جمهور الفقهاء (المالكية والشافعية والحنابلة) على عدم وجوب الزكاة في حلي الزينة الشخصية المعتادة.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                  value: _isPersonalJewelry,
-                  activeThumbColor: AppColors.goldAccent,
-                  onChanged: (val) {
-                    setState(() {
-                      _isPersonalJewelry = val;
-                    });
-                  },
+                ),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      title: const Text(
+                        'ضم الفضة إلى الذهب لتكميل النصاب (بالأجزاء)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      subtitle: const Text(
+                        'المعتمد في فقه الهادوية والزيدية (الأزهار) وجمهور الفقهاء: إذا كان لديك ذهب وفضة ولم يبلغ أحدهما نصاباً منفرداً، يُضمان بالأجزاء.',
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      value: _combineWithSilver,
+                      activeThumbColor: AppColors.goldAccent,
+                      onChanged: (val) {
+                        setState(() {
+                          _combineWithSilver = val;
+                          if (!val) _silverGramsController.clear();
+                        });
+                      },
+                    ),
+                    if (_combineWithSilver) ...[
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'سعر جرام الفضة المعتمد: ${zakatProv.silverPrice.toStringAsFixed(0)} ${zakatProv.currency}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                                ),
+                                const Text(
+                                  'نصاب الفضة: 595 جم',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            TextFormField(
+                              controller: _silverGramsController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [AppInputFormatters.decimal],
+                              decoration: const InputDecoration(
+                                labelText: 'وزن الفضة المراد ضمها بالجرام',
+                                hintText: 'مثال: 300',
+                                suffixText: 'جرام فضة',
+                                prefixIcon: Icon(Icons.circle_outlined, color: Colors.blueGrey),
+                              ),
+                              validator: (val) {
+                                if (!_combineWithSilver) return null;
+                                final goldVal = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0;
+                                final silverVal = double.tryParse(AppInputFormatters.normalizeArabicNumbers(val ?? '')) ?? 0.0;
+                                if (goldVal <= 0 && silverVal <= 0) {
+                                  return 'يرجى إدخال وزن الذهب أو الفضة على الأقل';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -335,7 +453,10 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
               ElevatedButton.icon(
                 onPressed: _calculate,
                 icon: const Icon(Icons.calculate),
-                label: const Text('احسب زكاة الذهب', style: TextStyle(fontSize: 18)),
+                label: Text(
+                  _combineWithSilver ? 'احسب زكاة الذهب والفضة (المشتركة)' : 'احسب زكاة الذهب',
+                  style: const TextStyle(fontSize: 18),
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -343,14 +464,14 @@ class _GoldCalcScreenState extends State<GoldCalcScreen> {
               if (_isCalculated && _result != null)
                 ZakatResultCard(
                   result: _result!,
-                  typeName: 'زكاة الذهب (عيار $_selectedKarat)',
-                  categoryKey: 'gold',
+                  typeName: _combineWithSilver ? 'زكاة الذهب والفضة (ضم النقدين بالأجزاء)' : 'زكاة الذهب (عيار $_selectedKarat)',
+                  categoryKey: _combineWithSilver ? 'gold_silver_combined' : 'gold',
                   totalWealth: double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0,
                   currency: zakatProv.currency,
-                  appliedPrice: double.tryParse(AppInputFormatters.normalizeArabicNumbers(_priceController.text.trim())),
+                  appliedPrice: currentKaratPrice,
                   goldKarat: _selectedKarat,
-                  pdfFileName: 'zakat_gold_receipt.pdf',
-                  pdfTitle: 'إقرار وتفصيل حساب زكاة الذهب',
+                  pdfFileName: _combineWithSilver ? 'zakat_combined_gold_silver.pdf' : 'zakat_gold_receipt.pdf',
+                  pdfTitle: _combineWithSilver ? 'إقرار وتفصيل حساب زكاة الذهب والفضة (ضم النقدين)' : 'إقرار وتفصيل حساب زكاة الذهب',
                 ),
             ],
           ),

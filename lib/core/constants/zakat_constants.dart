@@ -4,7 +4,9 @@ class ZakatConstants {
   static const double silverNisabGrams = 595.0; // 595 grams of pure silver
 
   // Standard Zakat percentage
-  static const double standardZakatRate = 0.025; // 2.5% (ربع العشر)
+  static const double standardZakatRate = 0.025; // 2.5% (ربع العشر) - السنة الهجرية القمرية (354 يوماً)
+  // نسبة الزكاة بالسنة الميلادية الشمسية (365 يوماً) وفق قرار مجمع الفقه الإسلامي الدولي ومعيار AAOIFI رقم 35
+  static const double solarZakatRate = 0.02577; // 2.577% لتعويض فرق الـ 11 يوماً عن السنة القمرية
 
   // Crops Zakat rates
   static const double rainFedRate = 0.10; // 10% سقيت بماء المطر / سيحاً (العشر)

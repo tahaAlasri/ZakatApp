@@ -18,32 +18,38 @@ class SilverCalcScreen extends StatefulWidget {
 class _SilverCalcScreenState extends State<SilverCalcScreen> {
   final _formKey = GlobalKey<FormState>();
   final _gramsController = TextEditingController();
-  final _priceController = TextEditingController();
+  final _goldGramsController = TextEditingController();
+  int _selectedGoldKarat = 21;
+  bool _combineWithGold = false; // ضم الذهب لتكميل النصاب بالأجزاء
   ZakatCalculationResult? _result;
   bool _isCalculated = false;
 
   @override
-  void initState() {
-    super.initState();
-    final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-    _priceController.text = zakatProv.silverPrice.toStringAsFixed(0);
-  }
-
-  @override
   void dispose() {
     _gramsController.dispose();
-    _priceController.dispose();
+    _goldGramsController.dispose();
     super.dispose();
   }
 
   void _calculate() {
     if (!_formKey.currentState!.validate()) return;
 
-    final grams = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0;
-    final price = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_priceController.text.trim())) ?? 0.0;
-
     final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-    final res = zakatProv.calculateSilverZakat(grams, pricePerGram: price);
+    final silverGrams = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0;
+    final goldGrams = _combineWithGold
+        ? (double.tryParse(AppInputFormatters.normalizeArabicNumbers(_goldGramsController.text.trim())) ?? 0.0)
+        : 0.0;
+
+    final ZakatCalculationResult res;
+    if (_combineWithGold && (goldGrams > 0 || silverGrams > 0)) {
+      res = zakatProv.calculateCombinedGoldSilverZakat(
+        goldGrams: goldGrams,
+        goldKarat: _selectedGoldKarat,
+        silverGrams: silverGrams,
+      );
+    } else {
+      res = zakatProv.calculateSilverZakat(silverGrams, pricePerGram: zakatProv.silverPrice);
+    }
 
     setState(() {
       _result = res;
@@ -51,10 +57,12 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم احتساب زكاة الفضة بنجاح'),
+      SnackBar(
+        content: Text(_combineWithGold
+            ? 'تم احتساب الزكاة بضم الفضة والذهب بالأجزاء وفق المعتمد الفقهي'
+            : 'تم احتساب زكاة الفضة بنجاح وفق التسعيرة الرسمية'),
         backgroundColor: AppColors.emeraldPrimary,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -64,6 +72,7 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
   Widget build(BuildContext context) {
     final zakatProv = Provider.of<ZakatProvider>(context);
     final favProv = Provider.of<FavoritesProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     const favId = 'calc_silver';
     final isFav = favProv.isFavorite(favId);
 
@@ -135,7 +144,7 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'المقدار الواجب إخراجه هو ربع العشر (2.5%) عند بلوغ النصاب وحولان الحول.',
+                              'المقدار الواجب إخراجه هو ربع العشر (2.5%) عند بلوغ النصاب وحولان الحول، والتسعيرة معتمدة من الهيئة العامة للزكاة.',
                               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                             ),
                           ],
@@ -147,6 +156,36 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
               ),
               const SizedBox(height: 20),
 
+              // Official Silver Price Card (From Control Panel)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkCard : Colors.blueGrey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.verified, color: Colors.blueGrey, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'سعر جرام الفضة المعتمد:',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${zakatProv.silverPrice.toStringAsFixed(0)} ${zakatProv.currency}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blueGrey),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
               TextFormField(
                 controller: _gramsController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -157,27 +196,123 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
                   suffixText: 'جرام',
                   prefixIcon: Icon(Icons.scale_outlined, color: AppColors.emeraldPrimary),
                 ),
-                validator: AppValidators.requiredPositiveNumber('وزن الفضة بالجرام'),
+                validator: (val) {
+                  if (!_combineWithGold && (val == null || val.trim().isEmpty)) return 'يرجى إدخال وزن الفضة';
+                  final silverVal = double.tryParse(AppInputFormatters.normalizeArabicNumbers(val ?? '')) ?? 0.0;
+                  final goldVal = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_goldGramsController.text.trim())) ?? 0.0;
+                  if (silverVal <= 0 && (!_combineWithGold || goldVal <= 0)) {
+                    return 'يرجى إدخال وزن صحيح';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [AppInputFormatters.decimal],
-                decoration: InputDecoration(
-                  labelText: 'سعر جرام الفضة اليوم',
-                  suffixText: zakatProv.currency,
-                  prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.emeraldPrimary),
+              // Combine Silver with Gold (ضم الذهب إلى الفضة بالأجزاء)
+              Card(
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: _combineWithGold ? AppColors.emeraldPrimary : Colors.transparent,
+                  ),
                 ),
-                validator: AppValidators.requiredPositiveNumber('سعر جرام الفضة'),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      title: const Text(
+                        'ضم الذهب إلى الفضة لتكميل النصاب (بالأجزاء)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      subtitle: const Text(
+                        'المعتمد في فقه الهادوية والزيدية (الأزهار) وجمهور الفقهاء: إذا كان لديك فضة وذهب ولم يبلغ أحدهما نصاباً منفرداً، يُضمان بالأجزاء.',
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      value: _combineWithGold,
+                      activeThumbColor: AppColors.emeraldPrimary,
+                      onChanged: (val) {
+                        setState(() {
+                          _combineWithGold = val;
+                          if (!val) _goldGramsController.clear();
+                        });
+                      },
+                    ),
+                    if (_combineWithGold) ...[
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'اختر عيار الذهب المراد ضمه:',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [24, 21, 18].map((karat) {
+                                final isSelected = _selectedGoldKarat == karat;
+                                return Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: ChoiceChip(
+                                      label: Text('$karat قيراط'),
+                                      selected: isSelected,
+                                      selectedColor: AppColors.goldAccent,
+                                      labelStyle: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected ? Colors.black : null,
+                                      ),
+                                      onSelected: (selected) {
+                                        if (selected) {
+                                          setState(() {
+                                            _selectedGoldKarat = karat;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _goldGramsController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [AppInputFormatters.decimal],
+                              decoration: InputDecoration(
+                                labelText: 'وزن الذهب عيار $_selectedGoldKarat بالجرام',
+                                hintText: 'مثال: 45',
+                                suffixText: 'جرام ذهب',
+                                prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.goldDark),
+                              ),
+                              validator: (val) {
+                                if (!_combineWithGold) return null;
+                                final silverVal = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0;
+                                final goldVal = double.tryParse(AppInputFormatters.normalizeArabicNumbers(val ?? '')) ?? 0.0;
+                                if (silverVal <= 0 && goldVal <= 0) {
+                                  return 'يرجى إدخال وزن الفضة أو الذهب على الأقل';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
 
               ElevatedButton.icon(
                 onPressed: _calculate,
                 icon: const Icon(Icons.calculate),
-                label: const Text('احسب زكاة الفضة', style: TextStyle(fontSize: 18)),
+                label: Text(
+                  _combineWithGold ? 'احسب زكاة الفضة والذهب (المشتركة)' : 'احسب زكاة الفضة',
+                  style: const TextStyle(fontSize: 18),
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -185,12 +320,13 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
               if (_isCalculated && _result != null)
                 ZakatResultCard(
                   result: _result!,
-                  typeName: 'زكاة الفضة',
-                  categoryKey: 'silver',
+                  typeName: _combineWithGold ? 'زكاة الفضة والذهب (ضم النقدين بالأجزاء)' : 'زكاة الفضة',
+                  categoryKey: _combineWithGold ? 'silver_gold_combined' : 'silver',
                   totalWealth: double.tryParse(AppInputFormatters.normalizeArabicNumbers(_gramsController.text.trim())) ?? 0.0,
                   currency: zakatProv.currency,
-                  pdfFileName: 'zakat_silver_receipt.pdf',
-                  pdfTitle: 'إقرار وتفصيل حساب زكاة الفضة',
+                  appliedPrice: zakatProv.silverPrice,
+                  pdfFileName: _combineWithGold ? 'zakat_combined_silver_gold.pdf' : 'zakat_silver_receipt.pdf',
+                  pdfTitle: _combineWithGold ? 'إقرار وتفصيل حساب زكاة الفضة والذهب (ضم النقدين)' : 'إقرار وتفصيل حساب زكاة الفضة',
                 ),
             ],
           ),

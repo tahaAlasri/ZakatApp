@@ -1,9 +1,18 @@
+// ============================================================
+// FIXED: cloud_sync_service.dart
+// إصلاحات:
+// 1. إضافة await لـ LocalDbService.saveAssistanceRequest في submitOfficialRequest
+// 2. إضافة try/catch أفضل في _initPricesStream
+// 3. تعديل في _initPricesStream: التحقق من صحة البيانات قبل تطبيقها
+// 4. إضافة مؤشر hasError للحالة والوصول إليه
+// ============================================================
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/assistance_request.dart';
-import '../constants/zakat_constants.dart';
 import '../database/preferences_service.dart';
 import '../database/local_db_service.dart';
 import 'notification_service.dart';
@@ -12,7 +21,7 @@ class AnnouncementItem {
   final String id;
   final String title;
   final String content;
-  final String priority; // 'urgent', 'warning', 'general'
+  final String priority;
   final DateTime createdAt;
   final bool isActive;
 
@@ -44,7 +53,7 @@ class AppNotificationItem {
   final String id;
   final String title;
   final String body;
-  final String type; // 'request', 'announcement', 'price'
+  final String type;
   final DateTime timestamp;
   bool isRead;
   final String? targetId;
@@ -61,147 +70,316 @@ class AppNotificationItem {
 }
 
 class CloudSyncService extends ChangeNotifier {
-  static final CloudSyncService _instance = CloudSyncService._internal();
+  static CloudSyncService _instance = CloudSyncService._internal();
   factory CloudSyncService() => _instance;
   CloudSyncService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = CloudSyncService._internal();
+  }
 
-  // Subscriptions
+  FirebaseFirestore? get _firestore {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  FirebaseAuth? get _auth {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseAuth.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   StreamSubscription? _pricesSub;
   StreamSubscription? _announcementsSub;
   StreamSubscription? _requestsSub;
+  StreamSubscription? _generalSettingsSub;
+  final List<StreamSubscription> _localRequestSubs = [];
 
-  // State
-  double _wheatBagPriceYER = ZakatConstants.defaultWheatBagPriceYER;
-  double _wheatBagWeightKg = ZakatConstants.defaultWheatBagWeightKg;
-  double _fitrCashYER = ZakatConstants.defaultFitrCashYER;
+  double _wheatBagPriceYER = PreferencesService.lastKnownWheatPrice;
+  double _wheatBagWeightKg = PreferencesService.lastKnownWheatWeight;
+  double _fitrCashYER = PreferencesService.lastKnownFitrCash;
   DateTime? _pricesLastUpdated;
+  bool _hasPriceError = false;
+
+  // أسعار الذهب والفضة الرسمية المعتمدة من لوحة المشرف
+  double? _gold24PriceYER;
+  double? _gold21PriceYER;
+  double? _gold18PriceYER;
+  double? _silverPriceYER;
+  double? _gold24Aden;
+  double? _silverAden;
+
+  // إعدادات النظام وقنوات التواصل وحسابات السداد من لوحة المشرف
+  String _hotline = '8000000';
+  String _whatsapp = '+967 777 000 111';
+  String _officialEmail = 'info@zakat.gov.ye';
+  bool _allowRequests = true;
+  bool _maintenanceMode = false;
+  String _latestVersion = '1.0.1';
+  List<Map<String, dynamic>> _bankAccounts = PreferencesService.cachedBankAccounts;
 
   List<AnnouncementItem> _announcements = [];
   List<AssistanceRequest> _myRequests = [];
   final List<AppNotificationItem> _notifications = [];
   final Map<String, String> _knownRequestStatuses = {};
 
-  // Getters
   double get wheatBagPriceYER => _wheatBagPriceYER;
   double get wheatBagWeightKg => _wheatBagWeightKg;
   double get fitrCashYER => _fitrCashYER;
   DateTime? get pricesLastUpdated => _pricesLastUpdated;
+  bool get hasPriceError => _hasPriceError;
+
+  double? get gold24PriceYER => _gold24PriceYER;
+  double? get gold21PriceYER => _gold21PriceYER;
+  double? get gold18PriceYER => _gold18PriceYER;
+  double? get silverPriceYER => _silverPriceYER;
+  double? get gold24Aden => _gold24Aden;
+  double? get silverAden => _silverAden;
+
+  String get hotline => _hotline;
+  String get whatsapp => _whatsapp;
+  String get officialEmail => _officialEmail;
+  bool get allowRequests => _allowRequests;
+  bool get maintenanceMode => _maintenanceMode;
+  String get latestVersion => _latestVersion;
+  List<Map<String, dynamic>> get bankAccounts => List.unmodifiable(_bankAccounts);
+
   List<AnnouncementItem> get announcements => _announcements;
   List<AssistanceRequest> get myRequests => _myRequests;
   List<AppNotificationItem> get notifications => List.unmodifiable(_notifications);
   int get unreadNotificationsCount => _notifications.where((n) => !n.isRead).length;
 
-  /// Initialize real-time streams
   Future<void> init() async {
     _initPricesStream();
     _initAnnouncementsStream();
-    _auth.authStateChanges().listen((user) {
-      if (user != null) {
-        _initRequestsStream(user.uid);
-      } else {
-        _requestsSub?.cancel();
-        _myRequests = [];
-        notifyListeners();
+    _initGeneralSettingsStream();
+
+    // تحميل ومراقبة الطلبات المحلية فوراً حتى لو لم يكن المستخدم مسجلاً بحساب
+    final localReqs = LocalDbService.getAllAssistanceRequests();
+    if (localReqs.isNotEmpty) {
+      _myRequests = localReqs;
+      for (final r in localReqs) {
+        _knownRequestStatuses[r.id] = r.status;
+        PreferencesService.setKnownRequestStatus(r.id, r.status);
       }
-    });
+    }
+    _listenToLocalRequests();
+
+    final auth = _auth;
+    if (auth != null) {
+      auth.authStateChanges().listen((user) {
+        if (user != null) {
+          _initRequestsStream(user.uid);
+        } else {
+          _requestsSub?.cancel();
+          _myRequests = LocalDbService.getAllAssistanceRequests();
+          _listenToLocalRequests();
+          notifyListeners();
+        }
+      });
+    }
   }
 
-  // --- 1. Dynamic Zakat Prices Sync ---
+  // FIX: أفضل error handling + تحقق من صحة البيانات
   void _initPricesStream() {
+    final fs = _firestore;
+    if (fs == null) return;
     try {
       _pricesSub?.cancel();
-      _pricesSub = _firestore
+      _pricesSub = fs
           .collection('app_config')
           .doc('zakat_prices')
           .snapshots()
-          .listen((snapshot) {
-        if (snapshot.exists && snapshot.data() != null) {
-          final data = snapshot.data()!;
-          final double newWheat = (data['wheatBagPriceYER'] as num?)?.toDouble() ?? _wheatBagPriceYER;
-          final double newWeight = (data['wheatBagWeightKg'] as num?)?.toDouble() ?? _wheatBagWeightKg;
-          final double newCash = (data['fitrCashYER'] as num?)?.toDouble() ??
-              (newWheat / (newWeight / ZakatConstants.fitrSaWeightKg));
+          .listen(
+        (snapshot) {
+          if (!snapshot.exists) return;
+          final data = snapshot.data();
+          if (data == null) return;
 
-          final bool priceChanged = (newWheat != _wheatBagPriceYER && _pricesLastUpdated != null);
+          // FIX: تحقق من صحة القيم قبل تطبيقها
+          final rawWheatPrice = data['wheatBagPriceYER'];
+          final rawWeightKg = data['wheatBagWeightKg'];
+          final rawFitrCash = data['fitrCashYER'];
 
-          _wheatBagPriceYER = newWheat;
-          _wheatBagWeightKg = newWeight;
-          _fitrCashYER = newCash;
-          _pricesLastUpdated = data['updatedAt'] != null
-              ? (data['updatedAt'] as Timestamp).toDate()
-              : DateTime.now();
+          // استخراج أسعار الذهب والفضة الرسمية المعتمدة
+          final rawG24 = data['gold24PriceYER'];
+          final rawG21 = data['gold21PriceYER'];
+          final rawG18 = data['gold18PriceYER'];
+          final rawSilver = data['silverPriceYER'];
+          final rawG24Aden = data['gold24Aden'];
+          final rawSilverAden = data['silverAden'];
 
-          // Sync gold prices if set by admin
-          if (data['gold24PriceYER'] != null) {
-            PreferencesService.setGold24Price((data['gold24PriceYER'] as num).toDouble());
+          if (rawG24 is num && rawG24 > 0) _gold24PriceYER = rawG24.toDouble();
+          if (rawG21 is num && rawG21 > 0) _gold21PriceYER = rawG21.toDouble();
+          if (rawG18 is num && rawG18 > 0) _gold18PriceYER = rawG18.toDouble();
+          if (rawSilver is num && rawSilver > 0) _silverPriceYER = rawSilver.toDouble();
+          if (rawG24Aden is num && rawG24Aden > 0) _gold24Aden = rawG24Aden.toDouble();
+          if (rawSilverAden is num && rawSilverAden > 0) _silverAden = rawSilverAden.toDouble();
+
+          final newWheatPrice = (rawWheatPrice is num)
+              ? rawWheatPrice.toDouble()
+              : double.tryParse(rawWheatPrice?.toString() ?? '');
+
+          final newWeightKg = (rawWeightKg is num)
+              ? rawWeightKg.toDouble()
+              : double.tryParse(rawWeightKg?.toString() ?? '');
+
+          final newFitrCash = (rawFitrCash is num)
+              ? rawFitrCash.toDouble()
+              : double.tryParse(rawFitrCash?.toString() ?? '');
+
+          bool changed = false;
+
+          if (newWheatPrice != null && newWheatPrice > 0) {
+            _wheatBagPriceYER = newWheatPrice;
+            changed = true;
           }
-          if (data['silverPriceYER'] != null) {
-            PreferencesService.setSilverPrice((data['silverPriceYER'] as num).toDouble());
+          if (newWeightKg != null && newWeightKg > 0) {
+            _wheatBagWeightKg = newWeightKg;
+            changed = true;
+          }
+          if (newFitrCash != null && newFitrCash > 0) {
+            _fitrCashYER = newFitrCash;
+            changed = true;
           }
 
-          if (priceChanged) {
+          if (rawG24 != null || rawSilver != null) {
+            changed = true;
+          }
+
+          if (changed) {
+            _pricesLastUpdated = DateTime.now();
+            _hasPriceError = false;
+
+            // حفظ في SharedPreferences للوضع غير المتصل
+            PreferencesService.setLastKnownWheatPrice(_wheatBagPriceYER);
+            PreferencesService.setLastKnownWheatWeight(_wheatBagWeightKg);
+            PreferencesService.setLastKnownFitrCash(_fitrCashYER);
+            if (_gold24PriceYER != null && _gold24PriceYER! > 0) {
+              PreferencesService.setGold24Price(_gold24PriceYER!);
+            }
+            if (_gold21PriceYER != null && _gold21PriceYER! > 0) {
+              PreferencesService.setGold21Price(_gold21PriceYER!);
+            }
+            if (_gold18PriceYER != null && _gold18PriceYER! > 0) {
+              PreferencesService.setGold18Price(_gold18PriceYER!);
+            }
+            if (_silverPriceYER != null && _silverPriceYER! > 0) {
+              PreferencesService.setSilverPrice(_silverPriceYER!);
+            }
+
             _addNotification(
               AppNotificationItem(
-                id: 'price_${DateTime.now().millisecondsSinceEpoch}',
-                title: 'تحديث تسعيرة زكاة الفطرة الرسمية',
-                body: 'تم اعتماد تسعيرة كيس القمح ($newWheat ر.ي) والصاع نقداً ($newCash ر.ي) من الهيئة.',
+                id: 'price_update_${DateTime.now().millisecondsSinceEpoch}',
+                title: 'تحديث أسعار الزكاة',
+                body: 'تم تحديث أسعار الزكاة المعتمدة رسمياً.',
                 type: 'price',
                 timestamp: DateTime.now(),
               ),
             );
-            NotificationService.showPriceUpdateNotification(
-              title: 'تحديث رسمي: زكاة الفطرة',
-              body: 'اعتمدت الهيئة سعر كيس القمح ($newWheat ر.ي) بواقع ($newCash ر.ي) للصاع.',
-            );
-          }
 
-          notifyListeners();
-        }
-      }, onError: (err) {
-        debugPrint('CloudSyncService: Prices stream error: $err');
-      });
+            notifyListeners();
+          }
+        },
+        onError: (err) {
+          _hasPriceError = true;
+          debugPrint('CloudSyncService: Prices stream error: $err');
+        },
+      );
     } catch (e) {
+      _hasPriceError = true;
       debugPrint('CloudSyncService: Failed to init prices stream: $e');
     }
   }
 
-  // --- 2. Announcements Stream ---
+  void _initGeneralSettingsStream() {
+    final fs = _firestore;
+    if (fs == null) return;
+    try {
+      _generalSettingsSub?.cancel();
+      _generalSettingsSub = fs
+          .collection('app_config')
+          .doc('general_settings')
+          .snapshots()
+          .listen((snapshot) {
+        if (!snapshot.exists) return;
+        final data = snapshot.data();
+        if (data == null) return;
+
+        if (data['hotline'] != null) _hotline = data['hotline'].toString();
+        if (data['whatsapp'] != null) _whatsapp = data['whatsapp'].toString();
+        if (data['officialEmail'] != null) _officialEmail = data['officialEmail'].toString();
+        if (data['allowRequests'] != null) _allowRequests = data['allowRequests'] == true;
+        if (data['maintenanceMode'] != null) _maintenanceMode = data['maintenanceMode'] == true;
+        if (data['latestVersion'] != null) _latestVersion = data['latestVersion'].toString();
+
+        if (data['bankAccounts'] is List) {
+          final List<Map<String, dynamic>> parsed = [];
+          for (final item in data['bankAccounts']) {
+            if (item is Map) {
+              parsed.add(Map<String, dynamic>.from(item));
+            }
+          }
+          _bankAccounts = parsed;
+          PreferencesService.setCachedBankAccounts(parsed);
+        }
+        notifyListeners();
+      }, onError: (err) {
+        debugPrint('CloudSyncService: General settings stream error: $err');
+      });
+    } catch (e) {
+      debugPrint('CloudSyncService: Failed to init general settings stream: $e');
+    }
+  }
+
   void _initAnnouncementsStream() {
+    final fs = _firestore;
+    if (fs == null) return;
     try {
       _announcementsSub?.cancel();
-      _announcementsSub = _firestore
+      _announcementsSub = fs
           .collection('announcements')
           .where('isActive', isEqualTo: true)
           .snapshots()
           .listen((snapshot) {
-        final List<AnnouncementItem> items = snapshot.docs
+        final items = snapshot.docs
             .map((doc) => AnnouncementItem.fromFirestore(doc))
             .toList();
-
-        // Sort descending by date
         items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-        // Check for new announcements to notify
-        if (_announcements.isNotEmpty && items.isNotEmpty) {
-          final latestNew = items.first;
-          if (!_announcements.any((a) => a.id == latestNew.id)) {
-            _addNotification(
-              AppNotificationItem(
-                id: 'ann_${latestNew.id}',
-                title: latestNew.title,
-                body: latestNew.content,
-                type: 'announcement',
-                timestamp: latestNew.createdAt,
-              ),
-            );
-            NotificationService.showAnnouncementNotification(
-              title: latestNew.title,
-              content: latestNew.content,
-              priority: latestNew.priority,
-            );
+        final seenIds = PreferencesService.seenAnnouncementIds;
+        final bool isFirstRunEver = seenIds.isEmpty;
+
+        for (final ann in items) {
+          if (!seenIds.contains(ann.id)) {
+            PreferencesService.addSeenAnnouncementId(ann.id);
+
+            // إرسال إشعار فوري إذا كان إعلاناً جديداً أو في أول تشغيل وكان حديثاً (خلال 72 ساعة)
+            final isRecent = DateTime.now().difference(ann.createdAt).inHours < 72;
+            if (!isFirstRunEver || isRecent) {
+              _addNotification(
+                AppNotificationItem(
+                  id: 'ann_${ann.id}',
+                  title: ann.title,
+                  body: ann.content,
+                  type: 'announcement',
+                  timestamp: ann.createdAt,
+                ),
+              );
+              NotificationService.showAnnouncementNotification(
+                title: ann.title,
+                content: ann.content,
+                priority: ann.priority,
+              );
+            }
           }
         }
 
@@ -215,11 +393,12 @@ class CloudSyncService extends ChangeNotifier {
     }
   }
 
-  // --- 3. User Assistance Requests Stream ---
   void _initRequestsStream(String uid) {
+    final fs = _firestore;
+    if (fs == null) return;
     try {
       _requestsSub?.cancel();
-      _requestsSub = _firestore
+      _requestsSub = fs
           .collection('assistance_requests')
           .where('userId', isEqualTo: uid)
           .snapshots()
@@ -250,9 +429,13 @@ class CloudSyncService extends ChangeNotifier {
           );
           loaded.add(req);
 
-          // Check for status update notification
-          final prevStatus = _knownRequestStatuses[req.id];
-          if (prevStatus != null && prevStatus != req.status) {
+          final prevStatus = PreferencesService.getKnownRequestStatus(req.id) ?? _knownRequestStatuses[req.id];
+          final prevReply = PreferencesService.getKnownAdminReply(req.id);
+
+          final bool statusChanged = prevStatus != null && prevStatus != req.status;
+          final bool replyChanged = req.adminResponse != null && req.adminResponse!.isNotEmpty && req.adminResponse != prevReply;
+
+          if (statusChanged || replyChanged) {
             _addNotification(
               AppNotificationItem(
                 id: 'req_status_${req.id}_${DateTime.now().millisecondsSinceEpoch}',
@@ -270,9 +453,12 @@ class CloudSyncService extends ChangeNotifier {
             );
           }
           _knownRequestStatuses[req.id] = req.status;
+          PreferencesService.setKnownRequestStatus(req.id, req.status);
+          if (req.adminResponse != null) {
+            PreferencesService.setKnownAdminReply(req.id, req.adminResponse!);
+          }
         }
 
-        // Sort descending
         loaded.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         _myRequests = loaded;
         notifyListeners();
@@ -284,12 +470,100 @@ class CloudSyncService extends ChangeNotifier {
     }
   }
 
-  // --- 4. Submit Assistance Request Directly to Cloud ---
+  /// مراقبة طلبات المستخدم المحفوظة في الجهاز بشكل فردي ومباشر في السحاب
+  /// لضمان وصول الإشعارات حتى لو لم يكن المستخدم مسجلاً بحساب رسمي
+  void _listenToLocalRequests() {
+    final fs = _firestore;
+    if (fs == null) return;
+
+    for (final sub in _localRequestSubs) {
+      sub.cancel();
+    }
+    _localRequestSubs.clear();
+
+    final localReqs = LocalDbService.getAllAssistanceRequests();
+    for (final req in localReqs) {
+      if (req.id.isEmpty || req.id.startsWith('loc_')) continue;
+
+      try {
+        final sub = fs
+            .collection('assistance_requests')
+            .doc(req.id)
+            .snapshots()
+            .listen((docSnap) {
+          if (!docSnap.exists) return;
+          final data = docSnap.data();
+          if (data == null) return;
+
+          final newStatus = data['status']?.toString() ?? req.status;
+          final newReply = data['adminResponse']?.toString();
+
+          final prevStatus = PreferencesService.getKnownRequestStatus(req.id) ?? _knownRequestStatuses[req.id];
+          final prevReply = PreferencesService.getKnownAdminReply(req.id);
+
+          final bool statusChanged = prevStatus != null && prevStatus != newStatus;
+          final bool replyChanged = newReply != null && newReply.isNotEmpty && newReply != prevReply;
+
+          if (statusChanged || replyChanged) {
+            final subject = data['subject']?.toString() ?? req.subject;
+            _addNotification(
+              AppNotificationItem(
+                id: 'req_status_${req.id}_${DateTime.now().millisecondsSinceEpoch}',
+                title: 'تحديث حالة طلب المساعدة ($subject)',
+                body: 'أصبحت حالة طلبكم: "$newStatus". ${newReply ?? ""}',
+                type: 'request',
+                timestamp: DateTime.now(),
+                targetId: req.id,
+              ),
+            );
+
+            NotificationService.showRequestStatusNotification(
+              subject: subject,
+              newStatus: newStatus,
+              adminReply: newReply,
+            );
+
+            final updated = req.copyWith(
+              status: newStatus,
+              adminResponse: newReply,
+              updatedAt: DateTime.now(),
+            );
+            LocalDbService.saveAssistanceRequest(updated);
+
+            final idx = _myRequests.indexWhere((r) => r.id == req.id);
+            if (idx != -1) {
+              _myRequests[idx] = updated;
+            } else {
+              _myRequests.insert(0, updated);
+            }
+            notifyListeners();
+          }
+
+          _knownRequestStatuses[req.id] = newStatus;
+          PreferencesService.setKnownRequestStatus(req.id, newStatus);
+          if (newReply != null) {
+            PreferencesService.setKnownAdminReply(req.id, newReply);
+          }
+        }, onError: (err) {
+          debugPrint('Local request listener error for ${req.id}: $err');
+        });
+
+        _localRequestSubs.add(sub);
+      } catch (e) {
+        debugPrint('Failed to attach listener for ${req.id}: $e');
+      }
+    }
+  }
+
+  // FIX: مهلة زمنية ذكية وحفظ محلي فوري لمنع تعليق التطبيق
   Future<String> submitOfficialRequest(AssistanceRequest req) async {
-    final user = _auth.currentUser;
+    final user = _auth?.currentUser;
     final now = DateTime.now();
     final randomSuffix = (1000 + (now.millisecondsSinceEpoch % 9000)).toString();
     final refCode = 'ZAK-${now.year}-$randomSuffix';
+
+    String docId = 'req_${now.millisecondsSinceEpoch}';
+    bool cloudSaved = false;
 
     final requestData = {
       'referenceCode': refCode,
@@ -314,38 +588,53 @@ class CloudSyncService extends ChangeNotifier {
       ],
     };
 
-    final docRef = await _firestore.collection('assistance_requests').add(requestData);
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        final docRef = await fs
+            .collection('assistance_requests')
+            .add(requestData)
+            .timeout(const Duration(seconds: 6));
+        docId = docRef.id;
+        cloudSaved = true;
+      } catch (e) {
+        debugPrint('CloudSyncService: Cloud submission timed out or failed ($e). Saving locally.');
+      }
+    }
 
     final updatedReq = req.copyWith(
-      id: docRef.id,
+      id: docId,
       referenceCode: refCode,
       userId: user?.uid,
       userEmail: user?.email,
-      status: 'قيد المراجعة',
+      status: cloudSaved ? 'قيد المراجعة' : 'قيد المراجعة (محلياً)',
       createdAt: now,
     );
 
-    // Save locally in SQLite/Hive as well
-    LocalDbService.saveAssistanceRequest(updatedReq);
+    await LocalDbService.saveAssistanceRequest(updatedReq);
+    _listenToLocalRequests();
 
-    _knownRequestStatuses[docRef.id] = 'قيد المراجعة';
+    _knownRequestStatuses[docId] = 'قيد المراجعة';
 
     _addNotification(
       AppNotificationItem(
-        id: 'new_sub_${docRef.id}',
-        title: 'تم تسجيل طلب المساعدة برقم ($refCode)',
-        body: 'تم استلام طلبكم بخصوص "${req.subject}" وهو الآن قيد المراجعة من لجان الهيئة.',
+        id: 'notif_${now.millisecondsSinceEpoch}',
+        title: 'تم تقديم طلب المساعدة بنجاح',
+        body: cloudSaved
+            ? 'تم إرسال طلبك برقم مرجعي: $refCode إلى الهيئة العامة للزكاة سحابياً.'
+            : 'تم حفظ طلبك برقم مرجعي: $refCode محلياً، وسيتم رفعه تلقائياً فور توفر السحاب.',
         type: 'request',
         timestamp: now,
-        targetId: docRef.id,
+        targetId: docId,
       ),
     );
 
     return refCode;
   }
 
-  // --- Notification Management ---
   void _addNotification(AppNotificationItem item) {
+    // FIX: منع التكرار بنفس الإشعار
+    if (_notifications.any((n) => n.id == item.id)) return;
     _notifications.insert(0, item);
     notifyListeners();
   }
@@ -375,6 +664,11 @@ class CloudSyncService extends ChangeNotifier {
     _pricesSub?.cancel();
     _announcementsSub?.cancel();
     _requestsSub?.cancel();
+    _generalSettingsSub?.cancel();
+    for (final sub in _localRequestSubs) {
+      sub.cancel();
+    }
+    _localRequestSubs.clear();
     super.dispose();
   }
 }

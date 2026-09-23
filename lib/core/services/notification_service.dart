@@ -56,9 +56,23 @@ class NotificationService {
       enableVibration: true,
     );
 
-    await _notificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(androidChannel);
+    final androidPlugin = _notificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.createNotificationChannel(androidChannel);
+
+    try {
+      await androidPlugin?.requestNotificationsPermission();
+    } catch (e) {
+      debugPrint('NotificationService: request permission error: $e');
+    }
+  }
+
+  static Future<void> showTestNotification() async {
+    await showNotification(
+      id: 999,
+      title: '🔔 إشعار تجريبي من الهيئة العامة للزكاة',
+      body: 'نظام الإشعارات والتنبيهات يعمل بنجاح على هاتفك مع الصوت والاهتزاز!',
+    );
   }
 
   static Future<void> showNotification({
@@ -67,7 +81,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
       channelDescription: channelDescription,
@@ -77,6 +91,11 @@ class NotificationService {
       showWhen: true,
       playSound: true,
       enableVibration: true,
+      styleInformation: BigTextStyleInformation(
+        body,
+        contentTitle: title,
+        summaryText: 'الهيئة العامة للزكاة',
+      ),
     );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
@@ -85,7 +104,7 @@ class NotificationService {
       presentSound: true,
     );
 
-    const NotificationDetails platformDetails = NotificationDetails(
+    final NotificationDetails platformDetails = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );

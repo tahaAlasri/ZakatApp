@@ -8,6 +8,7 @@ import '../utils/auth_guard.dart';
 import '../../models/zakat_record.dart';
 import '../../providers/zakat_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../views/payment/zakat_payment_screen.dart';
 
 /// Reusable component for displaying Zakat calculation results
 /// along with standard action buttons: Save to Record, Export PDF, and Share.
@@ -270,6 +271,32 @@ class ZakatResultCard extends StatelessWidget {
                 ),
               ],
             ),
+
+            if (isReached && result.zakatAmount > 0) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ZakatPaymentScreen(
+                        suggestedAmount: result.zakatAmount,
+                        zakatType: typeName,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.payments_outlined, color: AppColors.emeraldPrimary, size: 18),
+                label: const Text(
+                  'سداد وإخراج الزكاة (الحسابات المعتمدة)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.emeraldPrimary),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.emeraldPrimary, width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ],
           ],
         ),
       ),

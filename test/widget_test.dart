@@ -8,6 +8,7 @@ import 'package:zakat_app/models/zakat_record.dart';
 import 'package:zakat_app/models/favorite_item.dart';
 import 'package:zakat_app/models/assistance_request.dart';
 import 'package:zakat_app/models/user_model.dart';
+import 'package:zakat_app/models/hawl_item.dart';
 import 'package:zakat_app/core/services/pdf_service.dart';
 import 'package:zakat_app/core/services/market_price_service.dart';
 import 'package:zakat_app/core/services/auth_service.dart';
@@ -21,9 +22,18 @@ import 'package:zakat_app/core/database/preferences_service.dart';
 import 'package:zakat_app/core/widgets/price_transparency_card.dart';
 import 'package:zakat_app/views/calculators/money_calc_screen.dart';
 import 'package:zakat_app/views/calculators/gold_calc_screen.dart';
+import 'package:zakat_app/views/calculators/silver_calc_screen.dart';
 import 'package:zakat_app/providers/favorites_provider.dart';
 import 'package:zakat_app/views/requests/assistance_request_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:zakat_app/core/services/cloud_sync_service.dart';
+import 'package:zakat_app/core/services/backup_service.dart';
+import 'package:zakat_app/core/calculators/money_calculator.dart';
+import 'package:zakat_app/core/calculators/gold_silver_calculator.dart';
+import 'package:zakat_app/core/calculators/trade_calculator.dart';
+import 'package:zakat_app/core/calculators/livestock_calculator.dart';
+import 'package:zakat_app/core/calculators/fitr_calculator.dart';
+import 'package:zakat_app/core/calculators/stocks_crypto_calculator.dart';
 import 'package:zakat_app/core/utils/app_input_formatters.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -127,6 +137,19 @@ void main() {
       expect(personalJewelry.reachedNisab, isFalse);
       expect(personalJewelry.zakatAmount, 0.0);
       expect(personalJewelry.explanation, contains('حلي المباح'));
+
+      // 120g of 21k with Hanafi madhhab -> reachedNisab is True and zakat is applied
+      final personalJewelryHanafi = provider.calculateGoldZakat(
+        grams: 120,
+        karat: 21,
+        pricePerGram: 50000,
+        isPersonalJewelry: true,
+        madhhabRequiresZakat: true,
+      );
+      expect(personalJewelryHanafi.reachedNisab, isTrue);
+      // 120 * 0.025 = 3g of 21k -> 3 * 50000 = 150000.0
+      expect(personalJewelryHanafi.zakatAmount, 150000.0);
+      expect(personalJewelryHanafi.explanation, contains('مذهب الحنفية'));
     });
 
     // 3. Silver Zakat
@@ -301,7 +324,7 @@ void main() {
     });
 
     // 9. Minerals & Rikaz
-    test('Minerals & Rikaz: 20% for Rikaz, 2.5% for Minerals with Nisab', () {
+    test('Minerals & Rikaz: 20% for Rikaz and Minerals (Zaydi/Hadawi), with custom rate support', () {
       // Rikaz: 20% regardless of Nisab
       final rikaz = provider.calculateMineralsZakat(totalExtractedValue: 500000, isRikaz: true);
       expect(rikaz.reachedNisab, isTrue);
@@ -313,10 +336,19 @@ void main() {
       expect(mineralsBelow.zakatAmount, 0.0);
       expect(mineralsBelow.explanation, contains('لم تبلغ قيمة المعادن النصاب'));
 
-      // Minerals above 24k Nisab (e.g. 6,000,000) -> 2.5% = 150,000
+      // Minerals above 24k Nisab (e.g. 6,000,000) -> 20% (Khums in Zaydi Fiqh: وفي المعادن الخمس) = 1,200,000
       final mineralsAbove = provider.calculateMineralsZakat(totalExtractedValue: 6000000, isRikaz: false);
       expect(mineralsAbove.reachedNisab, isTrue);
-      expect(mineralsAbove.zakatAmount, 6000000 * 0.025); // 150,000
+      expect(mineralsAbove.zakatAmount, 6000000 * 0.20); // 1,200,000
+
+      // Minerals with custom extraction cost rate (2.5%)
+      final mineralsCustom = provider.calculateMineralsZakat(
+        totalExtractedValue: 6000000,
+        isRikaz: false,
+        customMineralRate: 0.025,
+      );
+      expect(mineralsCustom.reachedNisab, isTrue);
+      expect(mineralsCustom.zakatAmount, 6000000 * 0.025); // 150,000
     });
 
     // 10. Exploited Assets (4 Methods)
@@ -403,7 +435,7 @@ void main() {
       // 4 family members -> 4 * 1200 = 4800 YER
       final fitrBag = provider.calculateFitrZakat(
         familyMembers: 4,
-        wheatBagPrice: 24000,
+        stapleBagPrice: 24000,
         bagWeightKg: 50.0,
         isCashPayment: true,
       );
@@ -418,7 +450,7 @@ void main() {
       // 2 family members -> 2 * 1500 = 3000 YER
       final fitrSmallBag = provider.calculateFitrZakat(
         familyMembers: 2,
-        wheatBagPrice: 15000,
+        stapleBagPrice: 15000,
         bagWeightKg: 25.0,
         isCashPayment: true,
       );
@@ -426,6 +458,80 @@ void main() {
       expect(fitrSmallBag.zakatAmount, 3000.0);
       expect(fitrSmallBag.explanation, contains('10 صاعاً نبوياً'));
       expect(fitrSmallBag.explanation, contains('1500'));
+    });
+
+    // 12. Zaydi/Hadawi Specific Calculations: Combined Gold & Silver, Livestock Cash Valuation, Silver Trade Nisab
+    test('Zaydi/Hadawi: Combined Gold and Silver by fractions (ضم الذهب إلى الفضة بالأجزاء)', () {
+      const goldPrice24 = 65000.0;
+      const silverPrice = 750.0;
+
+      // Below combined Nisab: 20g of 24k gold (23.5% nisab) + 100g silver (16.8% nisab) -> ~40.3% nisab
+      final below = provider.calculateCombinedGoldSilverZakat(
+        goldGrams: 20,
+        goldKarat: 24,
+        silverGrams: 100,
+        gold24Price: goldPrice24,
+        silverPrice: silverPrice,
+      );
+      expect(below.reachedNisab, isFalse);
+      expect(below.zakatAmount, 0.0);
+      expect(below.explanation, contains('ضم الذهب إلى الفضة بالأجزاء'));
+
+      // Above combined Nisab: 42.5g of 24k gold (50% nisab) + 297.5g silver (50% nisab) -> 100% nisab
+      // Zakat gold: 42.5 * 0.025 = 1.0625g -> * 65000 = 69,062.5
+      // Zakat silver: 297.5 * 0.025 = 7.4375g -> * 750 = 5,578.125
+      // Total cash = 74,640.625
+      final above = provider.calculateCombinedGoldSilverZakat(
+        goldGrams: 42.5,
+        goldKarat: 24,
+        silverGrams: 297.5,
+        gold24Price: goldPrice24,
+        silverPrice: silverPrice,
+      );
+      expect(above.reachedNisab, isTrue);
+      expect(above.zakatAmount, closeTo(74640.625, 0.01));
+      expect(above.explanation, contains('الهادوية والزيدية'));
+      expect(above.zakatInKindDescription, contains('ذهب'));
+      expect(above.zakatInKindDescription, contains('فضة'));
+    });
+
+    test('Zaydi/Hadawi: Livestock cash valuation (إخراج القيمة نقداً بالريال اليمني)', () {
+      // 5 Camels: 1 sheep (at 120,000 YER)
+      final camelsCash = provider.calculateCamelsZakat(5, sheepPrice: 120000);
+      expect(camelsCash.reachedNisab, isTrue);
+      expect(camelsCash.zakatAmount, 120000.0);
+      expect(camelsCash.zakatInKindDescription, contains('شاة واحدة'));
+
+      // 30 Cows: 1 Tabee (at 450,000 YER)
+      final cowsCash = provider.calculateCowsZakat(30, tabeePrice: 450000);
+      expect(cowsCash.reachedNisab, isTrue);
+      expect(cowsCash.zakatAmount, 450000.0);
+      expect(cowsCash.zakatInKindDescription, contains('تبيع'));
+
+      // 40 Sheep: 1 Sheep (at 90,000 YER)
+      final sheepCash = provider.calculateSheepZakat(40, sheepPrice: 90000);
+      expect(sheepCash.reachedNisab, isTrue);
+      expect(sheepCash.zakatAmount, 90000.0);
+      expect(sheepCash.zakatInKindDescription, contains('شاة واحدة'));
+    });
+
+    test('Trade Zakat: Silver Nisab benchmark option (الأحظ والأنفع للمساكين)', () {
+      const silverPrice = 700.0;
+      const silverNisab = 595.0 * silverPrice; // 416,500 YER
+
+      // Asset net value: 600,000 YER (below gold nisab ~5,500,000 YER, but above silver nisab 416,500 YER)
+      final tradeWithSilver = provider.calculateTradeZakat(
+        inventoryValue: 400000,
+        cashInHand: 300000,
+        receivables: 100000,
+        liabilities: 200000, // Net: 600,000 YER
+        silverPrice: silverPrice,
+        useSilverNisab: true,
+      );
+      expect(tradeWithSilver.reachedNisab, isTrue);
+      expect(tradeWithSilver.nisabThreshold, silverNisab);
+      expect(tradeWithSilver.zakatAmount, 600000 * 0.025);
+      expect(tradeWithSilver.explanation, contains('595 جرام فضة'));
     });
   });
 
@@ -1117,16 +1223,16 @@ void main() {
       AuthService.setAuthStatusForTesting(null);
     });
 
-    test('AuthStatus values and canSubmitOfficialRequest strict rules', () {
-      // 1. Guest: cannot submit official request
+    test('AuthStatus values and canSubmitOfficialRequest rules', () {
+      // 1. Guest: cannot submit official request without login
       AuthService.setAuthStatusForTesting(AuthStatus.guest);
       expect(AuthService.authStatus, AuthStatus.guest);
       expect(AuthService.canSubmitOfficialRequest, isFalse);
 
-      // 2. Local Authenticated (offline mode): CANNOT submit official request
+      // 2. Local Authenticated (offline mode / biometrics): allowed to submit official request
       AuthService.setAuthStatusForTesting(AuthStatus.localAuthenticated);
       expect(AuthService.authStatus, AuthStatus.localAuthenticated);
-      expect(AuthService.canSubmitOfficialRequest, isFalse);
+      expect(AuthService.canSubmitOfficialRequest, isTrue);
 
       // 3. Firebase Authenticated: allowed to submit official request
       AuthService.setAuthStatusForTesting(AuthStatus.firebaseAuthenticated);
@@ -1139,14 +1245,15 @@ void main() {
       expect(AuthService.canSubmitOfficialRequest, isTrue);
     });
 
-    testWidgets('AssistanceRequestScreen displays draft labels and blocks official request for local/guest', (tester) async {
-      AuthService.setAuthStatusForTesting(AuthStatus.localAuthenticated);
+    testWidgets('AssistanceRequestScreen displays draft labels and prompts login for guest', (tester) async {
+      AuthService.setAuthStatusForTesting(AuthStatus.guest);
 
       await tester.pumpWidget(
         MultiProvider(
           providers: [
             ChangeNotifierProvider(create: (_) => AuthProvider()),
             ChangeNotifierProvider(create: (_) => ZakatProvider()),
+            ChangeNotifierProvider.value(value: CloudSyncService()),
           ],
           child: const MaterialApp(
             home: AssistanceRequestScreen(),
@@ -1159,9 +1266,9 @@ void main() {
       // Verify draft and preview UI labels exist
       expect(find.text('إنشاء مسودة طلب'), findsOneWidget);
       expect(find.text('تقديم طلب رسمي'), findsOneWidget);
-      expect(find.textContaining('أنت مسجل بالمصادقة المحلية'), findsOneWidget);
+      expect(find.textContaining('أنت تتصفح كزائر'), findsOneWidget);
 
-      // Scroll and tap official request button while localAuthenticated -> should show dialog warning
+      // Scroll and tap official request button while guest -> should show login dialog
       final officialBtn = find.byKey(const Key('btn_submit_official_request'));
       expect(officialBtn, findsOneWidget);
       await tester.ensureVisible(officialBtn);
@@ -1169,8 +1276,12 @@ void main() {
       await tester.tap(officialBtn);
       await tester.pumpAndSettle();
 
-      expect(find.text('غير متاح للمصادقة المحلية'), findsOneWidget);
-      expect(find.textContaining('المصادقة الحالية محلية دون اتصال ولا تعني أن الحساب موثق رسمياً'), findsOneWidget);
+      expect(find.text('تسجيل الدخول مطلوب'), findsOneWidget);
+      expect(find.textContaining('يتطلب تقديم طلب رسمي تسجيل الدخول'), findsOneWidget);
+
+      // Dismiss dialog
+      await tester.tap(find.text('إلغاء'));
+      await tester.pumpAndSettle();
     });
   });
 
@@ -1404,6 +1515,7 @@ void main() {
           providers: [
             ChangeNotifierProvider(create: (_) => AuthProvider()),
             ChangeNotifierProvider(create: (_) => ZakatProvider()),
+            ChangeNotifierProvider.value(value: CloudSyncService()),
           ],
           child: const MaterialApp(
             home: AssistanceRequestScreen(),
@@ -1715,14 +1827,14 @@ void main() {
       expect(below.zakatAmount, 0.0);
       expect(below.explanation, contains('لم تبلغ قيمة المعادن النصاب الشرعي'));
 
-      // Above Nisab (6,000,000 >= 5,525,000)
+      // Above Nisab (6,000,000 >= 5,525,000) -> 20% (Khums in Zaydi Fiqh: وفي المعادن الخمس)
       final above = provider.calculateMineralsZakat(
         totalExtractedValue: 6000000,
         isRikaz: false,
         customNisabThreshold: nisab,
       );
       expect(above.reachedNisab, isTrue);
-      expect(above.zakatAmount, 6000000 * 0.025);
+      expect(above.zakatAmount, 6000000 * 0.20);
 
       // Rikaz: 20% (Khums) regardless of Nisab
       final rikaz = provider.calculateMineralsZakat(
@@ -1832,9 +1944,9 @@ void main() {
       AuthService.setAuthStatusForTesting(AuthStatus.guest);
       expect(AuthService.canSubmitOfficialRequest, isFalse);
 
-      // Local authentication is also not permitted for official requests
+      // Local authentication is permitted for official requests
       AuthService.setAuthStatusForTesting(AuthStatus.localAuthenticated);
-      expect(AuthService.canSubmitOfficialRequest, isFalse);
+      expect(AuthService.canSubmitOfficialRequest, isTrue);
     });
 
     test('13. Price source failure handling (فشل مصدر الأسعار): Automatic regional fallback without crashing', () async {
@@ -2013,7 +2125,442 @@ void main() {
       expect(ltResultHigh.explanation, contains('طويل الأجل'));
     });
   });
+
+  group('16. Solar Year Rate (2.577%) - Gregorian Calendar Support', () {
+    final provider = ZakatProvider();
+
+    test('Money Zakat with solar year: 2.577% instead of 2.5%', () {
+      const goldPrice = 50000.0;
+      // Standard lunar year: 10,000,000 * 0.025 = 250,000
+      final lunarResult = provider.calculateMoneyZakat(10000000, goldPricePerGram: goldPrice, isSolarYear: false);
+      expect(lunarResult.reachedNisab, isTrue);
+      expect(lunarResult.zakatAmount, 250000.0);
+      expect(lunarResult.explanation, contains('2.5%'));
+
+      // Solar year: 10,000,000 * 0.02577 = 257,700
+      final solarResult = provider.calculateMoneyZakat(10000000, goldPricePerGram: goldPrice, isSolarYear: true);
+      expect(solarResult.reachedNisab, isTrue);
+      expect(solarResult.zakatAmount, 10000000 * 0.02577);
+      expect(solarResult.explanation, contains('2.577%'));
+      expect(solarResult.explanation, contains('سنة ميلادية'));
+    });
+
+    test('Trade Zakat with solar year', () {
+      final lunarResult = provider.calculateTradeZakat(
+        inventoryValue: 6000000,
+        cashInHand: 2000000,
+        receivables: 1000000,
+        liabilities: 1500000,
+        isSolarYear: false,
+      );
+      expect(lunarResult.zakatAmount, 7500000 * 0.025);
+
+      final solarResult = provider.calculateTradeZakat(
+        inventoryValue: 6000000,
+        cashInHand: 2000000,
+        receivables: 1000000,
+        liabilities: 1500000,
+        isSolarYear: true,
+      );
+      expect(solarResult.reachedNisab, isTrue);
+      expect(solarResult.zakatAmount, 7500000 * 0.02577);
+      expect(solarResult.explanation, contains('2.577%'));
+    });
+
+    test('Exploited Assets Zakat with solar year', () {
+      final solarResult = provider.calculateExploitedAssetsZakat(
+        grossIncome: 8000000,
+        expenses: 1000000,
+        method: ExploitedAssetsMethod.netRevenue,
+        isSolarYear: true,
+      );
+      expect(solarResult.reachedNisab, isTrue);
+      expect(solarResult.zakatAmount, 7000000 * 0.02577);
+      expect(solarResult.explanation, contains('2.577%'));
+    });
+
+    test('Stocks Zakat with solar year', () {
+      final solarSpecResult = provider.calculateStocksZakat(
+        sharesCount: 100,
+        shareMarketPrice: 60000,
+        isSpeculation: true,
+        isSolarYear: true,
+      );
+      expect(solarSpecResult.reachedNisab, isTrue);
+      expect(solarSpecResult.zakatAmount, 6000000 * 0.02577);
+      expect(solarSpecResult.explanation, contains('2.577%'));
+    });
+
+    test('solarZakatRate constant matches AAOIFI Standard 35', () {
+      expect(ZakatConstants.solarZakatRate, 0.02577);
+      // Solar rate should be higher than lunar rate
+      expect(ZakatConstants.solarZakatRate, greaterThan(ZakatConstants.standardZakatRate));
+    });
+  });
+
+  group('17. Cryptocurrency Zakat', () {
+    final provider = ZakatProvider();
+
+    test('Crypto Zakat: Below Nisab vs Above Nisab (Lunar Year)', () {
+      // Below Nisab: 1 BTC * 4,000,000 = 4,000,000 (< 4,250,000)
+      final below = provider.calculateCryptoZakat(
+        cryptoAmount: 1,
+        cryptoMarketPriceInFiat: 4000000,
+        isSolarYear: false,
+      );
+      expect(below.reachedNisab, isFalse);
+      expect(below.zakatAmount, 0.0);
+
+      // Above Nisab: 2 BTC * 4,000,000 = 8,000,000 (> 4,250,000)
+      final above = provider.calculateCryptoZakat(
+        cryptoAmount: 2,
+        cryptoMarketPriceInFiat: 4000000,
+        isSolarYear: false,
+      );
+      expect(above.reachedNisab, isTrue);
+      expect(above.zakatAmount, 8000000 * 0.025); // 200,000
+    });
+
+    test('Crypto Zakat: Solar Year Rate (2.577%)', () {
+      final solar = provider.calculateCryptoZakat(
+        cryptoAmount: 2,
+        cryptoMarketPriceInFiat: 4000000,
+        isSolarYear: true,
+      );
+      expect(solar.reachedNisab, isTrue);
+      expect(solar.zakatAmount, 8000000 * 0.02577); // 206,160
+      expect(solar.explanation, contains('2.577%'));
+    });
+  });
+
+  group('18. Multiple Hawl Tracker & HawlItem Model', () {
+    test('HawlItem: toMap and fromMap serialization', () {
+      final start = DateTime(2024, 1, 1);
+      final item = HawlItem(
+        id: 'hawl_test_01',
+        title: 'حساب بنك التضامن',
+        categoryKey: 'money',
+        categoryName: 'النقود والمدخرات',
+        startDate: start,
+        estimatedAmount: 5000000,
+        currency: 'ر.ي',
+        notes: 'حساب ودائع استثمارية',
+      );
+
+      final map = item.toMap();
+      final restored = HawlItem.fromMap(map);
+
+      expect(restored.id, 'hawl_test_01');
+      expect(restored.title, 'حساب بنك التضامن');
+      expect(restored.categoryKey, 'money');
+      expect(restored.categoryName, 'النقود والمدخرات');
+      expect(restored.startDate, start);
+      expect(restored.estimatedAmount, 5000000);
+      expect(restored.notes, 'حساب ودائع استثمارية');
+    });
+
+    test('HawlItem: countdown and status calculations', () {
+      final now = DateTime.now();
+      
+      // Started 100 days ago
+      final activeItem = HawlItem(
+        id: 'active_hawl',
+        title: 'ذهب التجارة',
+        categoryKey: 'gold',
+        categoryName: 'الذهب والفضة',
+        startDate: now.subtract(const Duration(days: 100)),
+      );
+      expect(activeItem.daysPassed, 100);
+      expect(activeItem.daysRemaining, 254);
+      expect(activeItem.isHawlCompleted, isFalse);
+      expect(activeItem.isNearingCompletion, isFalse);
+
+      // Started 330 days ago (nearing completion <= 30 days)
+      final nearingItem = HawlItem(
+        id: 'nearing_hawl',
+        title: 'عروض متجر الأقمشة',
+        categoryKey: 'trade',
+        categoryName: 'عروض التجارة',
+        startDate: now.subtract(const Duration(days: 330)),
+      );
+      expect(nearingItem.daysPassed, 330);
+      expect(nearingItem.daysRemaining, 24);
+      expect(nearingItem.isHawlCompleted, isFalse);
+      expect(nearingItem.isNearingCompletion, isTrue);
+
+      // Started 360 days ago (completed > 354 days)
+      final completedItem = HawlItem(
+        id: 'completed_hawl',
+        title: 'محفظة عملات رقمية',
+        categoryKey: 'crypto',
+        categoryName: 'العملات الرقمية المشفرة',
+        startDate: now.subtract(const Duration(days: 360)),
+      );
+      expect(completedItem.daysRemaining, 0);
+      expect(completedItem.isHawlCompleted, isTrue);
+      expect(completedItem.isNearingCompletion, isFalse);
+    });
+
+    test('HawlItem: icons and colors per category', () {
+      final goldItem = HawlItem(
+        id: 'g1',
+        title: 'ذهب',
+        categoryKey: 'gold',
+        categoryName: 'الذهب والفضة',
+        startDate: DateTime.now(),
+      );
+      expect(goldItem.icon, Icons.diamond_outlined);
+
+      final cryptoItem = HawlItem(
+        id: 'c1',
+        title: 'بيتكوين',
+        categoryKey: 'crypto',
+        categoryName: 'العملات الرقمية المشفرة',
+        startDate: DateTime.now(),
+      );
+      expect(cryptoItem.icon, Icons.currency_bitcoin);
+    });
+  });
+
+  group('19. Encrypted Backup & Restore Service (AES-256)', () {
+    test('BackupService: Generate encrypted payload, decrypt and restore', () async {
+      // Save test records
+      final testRecord = ZakatRecord(
+        id: 'backup_test_rec_1',
+        typeName: 'زكاة النقد',
+        categoryKey: 'money',
+        totalWealth: 10000000,
+        zakatAmount: 250000,
+        currency: 'ر.ي',
+        reachedNisab: true,
+      );
+      await LocalDbService.saveZakatRecord(testRecord);
+
+      final testHawl = HawlItem(
+        id: 'backup_test_hawl_1',
+        title: 'حول الذهب السنوي',
+        categoryKey: 'gold',
+        categoryName: 'الذهب والفضة',
+        startDate: DateTime(2024, 1, 1),
+      );
+      await LocalDbService.saveHawlItem(testHawl);
+
+      // Generate encrypted backup
+      final encryptedPayload = await BackupService.generateEncryptedBackupPayload();
+      expect(encryptedPayload.isNotEmpty, isTrue);
+      expect(encryptedPayload.startsWith('{'), isFalse); // Must be encrypted
+
+      // Restore from payload
+      final result = await BackupService.restoreFromPayload(encryptedPayload);
+      expect(result.recordsRestored, greaterThanOrEqualTo(1));
+      expect(result.hawlsRestored, greaterThanOrEqualTo(1));
+    });
+  });
+
+  group('20. Decoupled Pure Domain Calculators (Clean Architecture)', () {
+    test('MoneyCalculator: Lunar vs Solar calculation', () {
+      final lunarRes = MoneyCalculator.calculate(
+        moneyAmount: 10000000,
+        gold24Price: 50000,
+        silverPrice: 600,
+        isSolarYear: false,
+      );
+      expect(lunarRes.reachedNisab, isTrue);
+      expect(lunarRes.zakatAmount, 250000.0);
+
+      final solarRes = MoneyCalculator.calculate(
+        moneyAmount: 10000000,
+        gold24Price: 50000,
+        silverPrice: 600,
+        isSolarYear: true,
+      );
+      expect(solarRes.reachedNisab, isTrue);
+      expect(solarRes.zakatAmount, 257700.0);
+    });
+
+    test('GoldSilverCalculator: Karat conversion & personal usage toggle', () {
+      final goldRes = GoldSilverCalculator.calculateGold(
+        grams: 100,
+        karat: 21,
+        gold24Price: 50000,
+        gold21Price: 43750,
+        gold18Price: 37500,
+      );
+      expect(goldRes.reachedNisab, isTrue);
+      expect(goldRes.zakatAmount, (100 * 0.025) * 43750);
+
+      final silverRes = GoldSilverCalculator.calculateSilver(
+        grams: 600,
+        silverPrice: 600,
+      );
+      expect(silverRes.reachedNisab, isTrue);
+      expect(silverRes.zakatAmount, 600 * 0.025 * 600);
+    });
+
+    test('TradeCalculator: Net inventory, debt deduction and rate', () {
+      final tradeRes = TradeCalculator.calculate(
+        inventoryValue: 8000000,
+        cashInHand: 2000000,
+        receivables: 1000000,
+        liabilities: 3000000,
+        gold24Price: 50000,
+        isSolarYear: false,
+      );
+      // Net = 8M + 2M + 1M - 3M = 8,000,000
+      expect(tradeRes.reachedNisab, isTrue);
+      expect(tradeRes.zakatAmount, 200000.0);
+    });
+
+    test('LivestockCalculator: Camel, Cow, and Sheep brackets', () {
+      final camelRes = LivestockCalculator.calculateCamels(25);
+      expect(camelRes.reachedNisab, isTrue);
+      expect(camelRes.zakatInKindDescription, contains('بنت مخاض'));
+
+      final cowRes = LivestockCalculator.calculateCows(30);
+      expect(cowRes.reachedNisab, isTrue);
+      expect(cowRes.zakatInKindDescription, contains('تبيع'));
+
+      final sheepRes = LivestockCalculator.calculateSheep(120);
+      expect(sheepRes.reachedNisab, isTrue);
+      expect(sheepRes.zakatInKindDescription, contains('شاة واحدة'));
+    });
+
+    test('FitrCalculator: Head count & multi-staple calculation', () {
+      final fitrRes = FitrCalculator.calculate(
+        familyMembers: 5,
+        stapleName: 'بر (قمح محلي)',
+        cashValuePerPerson: 2000,
+      );
+      expect(fitrRes.zakatAmount, 10000.0); // 5 * 2000
+      expect(fitrRes.zakatInKindDescription, contains('12.5 كجم'));
+    });
+
+    test('StocksCryptoCalculator: Trading stocks vs Dividend shares', () {
+      final tradingRes = StocksCryptoCalculator.calculateStocks(
+        sharesCount: 1000,
+        shareMarketPrice: 5000,
+        isSpeculation: true,
+        gold24Price: 50000,
+        isSolarYear: false,
+      );
+      expect(tradingRes.reachedNisab, isTrue);
+      expect(tradingRes.zakatAmount, 5000000 * 0.025);
+
+      final dividendRes = StocksCryptoCalculator.calculateStocks(
+        sharesCount: 1000,
+        shareMarketPrice: 5000,
+        isSpeculation: false,
+        dividendPerShare: 500,
+        gold24Price: 50000,
+        isSolarYear: false,
+      );
+      // Dividends = 1000 * 500 = 500,000 (below gold nisab 4.25M)
+      expect(dividendRes.reachedNisab, isFalse);
+    });
+
+    testWidgets('GoldCalcScreen: Toggle combined silver and calculate', (tester) async {
+      tester.view.physicalSize = const Size(1000, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final zakatProv = ZakatProvider();
+      final favProv = FavoritesProvider();
+      final authProv = AuthProvider();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: zakatProv),
+            ChangeNotifierProvider.value(value: favProv),
+            ChangeNotifierProvider.value(value: authProv),
+          ],
+          child: const MaterialApp(
+            home: GoldCalcScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify switch exists and tap it
+      final switchTileFinder = find.widgetWithText(SwitchListTile, 'ضم الفضة إلى الذهب لتكميل النصاب (بالأجزاء)');
+      expect(switchTileFinder, findsOneWidget);
+      await tester.tap(switchTileFinder);
+      await tester.pumpAndSettle();
+
+      // Enter 42.5g gold (50% nisab) and 297.5g silver (50% nisab)
+      final textFields = find.byType(TextFormField);
+      expect(textFields, findsNWidgets(2));
+
+      await tester.enterText(textFields.first, '42.5'); // Gold 24k
+      // Select 24k chip
+      await tester.tap(find.text('24 قيراط'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(textFields.last, '297.5'); // Silver
+      await tester.pumpAndSettle();
+
+      // Tap calculate button
+      final calcBtn = find.widgetWithText(ElevatedButton, 'احسب زكاة الذهب والفضة (المشتركة)');
+      expect(calcBtn, findsOneWidget);
+      await tester.tap(calcBtn);
+      await tester.pumpAndSettle();
+
+      // Check result: Nisab reached
+      expect(find.textContaining('ضم الذهب إلى الفضة بالأجزاء'), findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('SilverCalcScreen: Toggle combined gold and calculate', (tester) async {
+      tester.view.physicalSize = const Size(1000, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final zakatProv = ZakatProvider();
+      final favProv = FavoritesProvider();
+      final authProv = AuthProvider();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: zakatProv),
+            ChangeNotifierProvider.value(value: favProv),
+            ChangeNotifierProvider.value(value: authProv),
+          ],
+          child: const MaterialApp(
+            home: SilverCalcScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify switch exists and tap it
+      final switchTileFinder = find.widgetWithText(SwitchListTile, 'ضم الذهب إلى الفضة لتكميل النصاب (بالأجزاء)');
+      expect(switchTileFinder, findsOneWidget);
+      await tester.tap(switchTileFinder);
+      await tester.pumpAndSettle();
+
+      // Enter silver and gold
+      final textFields = find.byType(TextFormField);
+      expect(textFields, findsNWidgets(2));
+
+      await tester.enterText(textFields.first, '297.5'); // Silver (50% nisab)
+      await tester.enterText(textFields.last, '42.5');  // Gold (50% nisab at 24k)
+
+      // Select 24k chip for gold
+      await tester.tap(find.text('24 قيراط'));
+      await tester.pumpAndSettle();
+
+      // Tap calculate button
+      final calcBtn = find.widgetWithText(ElevatedButton, 'احسب زكاة الفضة والذهب (المشتركة)');
+      expect(calcBtn, findsOneWidget);
+      await tester.tap(calcBtn);
+      await tester.pumpAndSettle();
+
+      // Check result: Nisab reached
+      expect(find.textContaining('ضم الذهب إلى الفضة بالأجزاء'), findsAtLeastNWidgets(1));
+    });
+  });
 }
+
 
 
 

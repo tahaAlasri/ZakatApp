@@ -18,6 +18,7 @@ import '../history/zakat_history_screen.dart';
 import '../../core/services/cloud_sync_service.dart';
 import '../requests/my_requests_screen.dart';
 import '../notifications/notifications_center_screen.dart';
+import '../payment/zakat_payment_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -51,6 +52,43 @@ class HomeScreen extends StatelessWidget {
         ),
         centerTitle: true,
         actions: [
+          Consumer<CloudSyncService>(
+            builder: (context, cloudSync, _) {
+              final unread = cloudSync.unreadNotificationsCount;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'مركز الإشعارات',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const NotificationsCenterScreen()),
+                      );
+                    },
+                  ),
+                  if (unread > 0)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: AppColors.error,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        child: Text(
+                          '$unread',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             tooltip: 'التحليلات والرسوم البيانية',
@@ -230,64 +268,209 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+
+              // Dynamic Announcements Banner from Admin
+              Consumer<CloudSyncService>(
+                builder: (context, cloudSync, _) {
+                  if (cloudSync.announcements.isEmpty) return const SizedBox.shrink();
+                  final announcement = cloudSync.announcements.first;
+                  final isUrgent = announcement.priority == 'urgent';
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isUrgent
+                          ? AppColors.error.withValues(alpha: 0.12)
+                          : AppColors.goldAccent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isUrgent
+                            ? AppColors.error.withValues(alpha: 0.4)
+                            : AppColors.goldDark.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isUrgent ? Icons.campaign : Icons.campaign_outlined,
+                          color: isUrgent ? AppColors.error : AppColors.goldDark,
+                          size: 26,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                announcement.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: isUrgent ? AppColors.error : Colors.brown.shade900,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                announcement.content,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11.5, height: 1.4),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                icon: Icon(
+                                  Icons.campaign_rounded,
+                                  color: isUrgent ? AppColors.error : AppColors.emeraldPrimary,
+                                  size: 36,
+                                ),
+                                title: Text(announcement.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                content: Text(announcement.content, style: const TextStyle(fontSize: 13, height: 1.6)),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
+                                ],
+                              ),
+                            );
+                          },
+                          child: const Text('التفاصيل', style: TextStyle(fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
+              // Quick Requests Tracking Card
+              Consumer<CloudSyncService>(
+                builder: (context, cloudSync, _) {
+                  final reqCount = cloudSync.myRequests.length;
+                  if (reqCount == 0) return const SizedBox.shrink();
+                  final pendingCount = cloudSync.myRequests.where((r) => r.status == 'قيد المراجعة' || r.status == 'قيد الدراسة').length;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const MyRequestsScreen()),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.emeraldPrimary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.emeraldPrimary.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.assignment_turned_in_outlined, color: AppColors.emeraldPrimary, size: 22),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                pendingCount > 0
+                                    ? 'لديك ($pendingCount) طلب مساعدة قيد المتابعة'
+                                    : 'متابعة سجل طلبات المساعدة السابقة ($reqCount)',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios, size: 13, color: AppColors.emeraldPrimary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
 
               // Live Gold & Silver Prices Strip
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.circle, size: 10, color: AppColors.goldAccent),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('ذهب 24 (خالص)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                              Text(
-                                '${AppFormatters.formatNumber(zakatProv.gold24Price, decimals: 0)} ${zakatProv.currency}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.circle, size: 8, color: AppColors.goldAccent),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('ذهب 24 (خالص)', style: TextStyle(fontSize: 10.5, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '${AppFormatters.formatNumber(zakatProv.gold24Price, decimals: 0)} ${zakatProv.currency}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
-                      Container(height: 30, width: 1, color: Colors.grey.shade300),
-                      Row(
-                        children: [
-                          const Icon(Icons.circle, size: 10, color: Colors.blueGrey),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('فضة (جرام)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                              Text(
-                                '${AppFormatters.formatNumber(zakatProv.silverPrice, decimals: 0)} ${zakatProv.currency}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      Container(height: 28, width: 1, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 4)),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.circle, size: 8, color: Colors.blueGrey),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('فضة (جرام)', style: TextStyle(fontSize: 10.5, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '${AppFormatters.formatNumber(zakatProv.silverPrice, decimals: 0)} ${zakatProv.currency}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
-                      Container(height: 30, width: 1, color: Colors.grey.shade300),
-                      Row(
-                        children: [
-                          const Icon(Icons.balance, size: 14, color: AppColors.emeraldPrimary),
-                          const SizedBox(width: 6),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('نصاب النقد (85غ)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                              Text(
-                                '${AppFormatters.formatNumber(zakatProv.gold24Price * 85, decimals: 0)} ${zakatProv.currency}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.emeraldPrimary),
+                      Container(height: 28, width: 1, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 4)),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.balance, size: 12, color: AppColors.emeraldPrimary),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('نصاب النقد', style: TextStyle(fontSize: 10.5, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '${AppFormatters.formatNumber(zakatProv.gold24Price * 85, decimals: 0)} ${zakatProv.currency}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: AppColors.emeraldPrimary),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -437,6 +620,63 @@ class HomeScreen extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 20),
+
+              // Zakat Payment & Masaref Quick Action Card
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: isDark
+                        ? AppColors.goldAccent.withValues(alpha: 0.3)
+                        : AppColors.goldDark.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const ZakatPaymentScreen()),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.goldDark.withValues(alpha: 0.25)
+                                : Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.payments_outlined, color: AppColors.goldDark, size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'قنوات سداد وتوجيه الزكاة الرسمية',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'الحسابات المعتمدة (كاك بنك، الكريمي، ون كاش، فلوسك) والمصارف الشرعية',
+                                style: TextStyle(fontSize: 11, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               // Visual Analytics Quick Banner Card
               Card(

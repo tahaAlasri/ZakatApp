@@ -4,68 +4,23 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/zakat_constants.dart';
-import '../../core/services/market_price_service.dart';
 import '../../core/utils/app_input_formatters.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/zakat_provider.dart';
+import '../../providers/hawl_provider.dart';
 import '../../providers/notification_provider.dart';
+import '../../core/services/backup_service.dart';
 import '../permissions/permissions_screen.dart';
 import '../auth/login_screen.dart';
 import '../../core/utils/auth_guard.dart';
+import '../../core/services/cloud_sync_service.dart';
+
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  void _showMarketCityPicker(BuildContext context, ZakatProvider zakatProv) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Icons.location_city, color: AppColors.emeraldPrimary),
-                    SizedBox(width: 8),
-                    Text('اختر السوق والمدينة لتسعير الذهب والفضة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ...MarketPriceService.supportedMarkets.map((m) {
-                final isSelected = zakatProv.marketCity == m.id;
-                return ListTile(
-                  title: Text(m.name, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                  subtitle: Text('عيار 21: ${m.defaultGold21.toStringAsFixed(0)} ${m.currency} | فضة: ${m.defaultSilver.toStringAsFixed(0)} ${m.currency}'),
-                  trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.emeraldPrimary) : null,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final res = await zakatProv.fetchAndApplyMarketPrices(cityId: m.id);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(res.message),
-                          backgroundColor: res.isLiveApi ? AppColors.emeraldPrimary : AppColors.goldDark,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                );
-              }),
-            ],
-          ),
-        );
-      },
-    );
-  }
+
 
   void _showCurrencyPicker(BuildContext context, ZakatProvider zakatProv) {
     showModalBottomSheet(
@@ -108,76 +63,6 @@ class SettingsScreen extends StatelessWidget {
               }),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  void _showPriceEditor(BuildContext context, ZakatProvider zakatProv) {
-    final goldCtrl = TextEditingController(text: zakatProv.gold24Price.toStringAsFixed(0));
-    final silverCtrl = TextEditingController(text: zakatProv.silverPrice.toStringAsFixed(0));
-    final formKey = GlobalKey<FormState>();
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('تعديل أسعار الذهب والفضة اللحظية'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: goldCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [AppInputFormatters.decimal],
-                  validator: AppValidators.requiredPositiveNumber('سعر جرام الذهب عيار 24'),
-                  decoration: InputDecoration(
-                    labelText: 'سعر جرام الذهب عيار 24 الخالص (${zakatProv.currency})',
-                    hintText: 'الأساس الشرعي المعتمد لاحتساب النصاب',
-                    prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.goldDark),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: silverCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [AppInputFormatters.decimal],
-                  validator: AppValidators.requiredPositiveNumber('سعر جرام الفضة'),
-                  decoration: InputDecoration(
-                    labelText: 'سعر جرام الفضة (${zakatProv.currency})',
-                    prefixIcon: const Icon(Icons.circle_outlined, color: Colors.blueGrey),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-
-                final g = AppInputFormatters.tryParseDouble(goldCtrl.text);
-                final s = AppInputFormatters.tryParseDouble(silverCtrl.text);
-                if (g != null && g > 0) zakatProv.updateGold24Price(g);
-                if (s != null && s > 0) zakatProv.updateSilverPrice(s);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('تم حفظ أسعار الذهب والفضة المحدثة بنجاح'),
-                    backgroundColor: AppColors.emeraldPrimary,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
         );
       },
     );
@@ -387,11 +272,162 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _exportAndShareBackup(BuildContext context) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppColors.emeraldPrimary),
+                  SizedBox(height: 14),
+                  Text('جاري تشفير وتجهيز النسخة الاحتياطية...', style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await BackupService.shareBackup();
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تجهيز وتصدير النسخة الاحتياطية المشفرة بنجاح'),
+            backgroundColor: AppColors.emeraldPrimary,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('حدث خطأ أثناء تصدير النسخة: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showRestoreDialog(BuildContext context) {
+    final payloadCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.settings_backup_restore, color: AppColors.emeraldPrimary),
+              SizedBox(width: 8),
+              Text('استعادة البيانات المشفرة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'الصق كود النسخة الاحتياطية المشفرة أو نص ملف النسخة لاستعادة كافة السجلات والأحوال والمفضلات:',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: payloadCtrl,
+                  maxLines: 6,
+                  decoration: InputDecoration(
+                    hintText: 'الصق محتوى النسخة المشفرة هنا...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    filled: true,
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.emeraldPrimary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final payload = payloadCtrl.text.trim();
+                if (payload.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('يرجى لصق كود النسخة الاحتياطية المشفرة أولاً'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.pop(ctx);
+                try {
+                  final result = await BackupService.restoreFromPayload(payload);
+                  if (context.mounted) {
+                    Provider.of<ZakatProvider>(context, listen: false).loadRecords();
+                    Provider.of<HawlProvider>(context, listen: false).reload();
+
+                    showDialog(
+                      context: context,
+                      builder: (infoCtx) => AlertDialog(
+                        icon: const Icon(Icons.check_circle, color: AppColors.emeraldPrimary, size: 48),
+                        title: const Text('اكتملت الاستعادة بنجاح', style: TextStyle(fontWeight: FontWeight.bold)),
+                        content: Text(
+                          'تمت استعادة:\n• ${result.recordsRestored} سجل عملية زكوية\n• ${result.hawlsRestored} متتبع حول زكوي\n• ${result.favoritesRestored} عنصر في المفضلة',
+                          style: const TextStyle(fontSize: 14, height: 1.6),
+                        ),
+                        actions: [
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.emeraldPrimary, foregroundColor: Colors.white),
+                            onPressed: () => Navigator.pop(infoCtx),
+                            child: const Text('تم'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('فشل الاستعادة: $e'),
+                        backgroundColor: AppColors.error,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('استعادة البيانات الآن'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProv = Provider.of<ThemeProvider>(context);
     final authProv = Provider.of<AuthProvider>(context);
     final zakatProv = Provider.of<ZakatProvider>(context);
+    final cloudSync = Provider.of<CloudSyncService>(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -625,6 +661,20 @@ class SettingsScreen extends StatelessWidget {
                         );
                       },
                     ),
+
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.security_outlined, color: Colors.blue),
+                      title: const Text('صلاحيات وأذونات التطبيق'),
+                      subtitle: const Text('التحقق من إذن الإشعارات والتخزين في نظام الهاتف'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const PermissionsScreen()),
+                        );
+                      },
+                    ),
                   ],
                 ),
               );
@@ -632,18 +682,56 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Currency & Market Prices
-          const Text('العملة وأسعار السوق الإقليمية', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          // Currency & Official Zakat Authority Prices (Control Panel Synced)
+          const Text('أسعار الزكاة المعتمدة رسمياً (لوحة التحكم)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
           const SizedBox(height: 8),
+          if (cloudSync.pricesLastUpdated != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_done, size: 14, color: AppColors.emeraldPrimary.withValues(alpha: 0.7)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'آخر تحديث سحابي: ${cloudSync.pricesLastUpdated!.day}/${cloudSync.pricesLastUpdated!.month}/${cloudSync.pricesLastUpdated!.year} - ${cloudSync.pricesLastUpdated!.hour}:${cloudSync.pricesLastUpdated!.minute.toString().padLeft(2, "0")}',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
           Card(
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.location_city, color: AppColors.goldDark),
-                  title: const Text('السوق الإقليمي المعتمد'),
-                  subtitle: Text(MarketPriceService.getMarketById(zakatProv.marketCity).name),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () => _showMarketCityPicker(context, zakatProv),
+                  leading: const Icon(Icons.verified, color: AppColors.emeraldPrimary),
+                  title: const Text('التسعيرة الرسمية للذهب والفضة'),
+                  subtitle: Text(
+                    'الذهب عيار 24: ${zakatProv.gold24Price.toStringAsFixed(0)} ${zakatProv.currency} | عيار 21: ${zakatProv.gold21Price.toStringAsFixed(0)} | الفضة: ${zakatProv.silverPrice.toStringAsFixed(0)}',
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.emeraldPrimary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('معتمد', style: TextStyle(fontSize: 11, color: AppColors.emeraldPrimary, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.grain, color: AppColors.goldDark),
+                  title: const Text('تسعيرة زكاة الفطرة المعتمدة'),
+                  subtitle: Text(
+                    'كيس القمح (50 كجم): ${cloudSync.wheatBagPriceYER.toStringAsFixed(0)} ${zakatProv.currency} (قيمة الصاع للفرد: ${cloudSync.fitrCashYER.toStringAsFixed(0)} ${zakatProv.currency})',
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.goldDark.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('سحابي', style: TextStyle(fontSize: 11, color: AppColors.goldDark, fontWeight: FontWeight.bold)),
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -654,65 +742,136 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => _showCurrencyPicker(context, zakatProv),
                 ),
                 const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.price_change_outlined, color: AppColors.emeraldDark),
-                  title: const Text('أسعار الذهب والفضة (تعديل يدوي)'),
-                  subtitle: Text('الذهب (عيار 24 خالص): ${zakatProv.gold24Price.toStringAsFixed(0)} ${zakatProv.currency} | عيار 21: ${zakatProv.gold21Price.toStringAsFixed(0)} | الفضة: ${zakatProv.silverPrice.toStringAsFixed(0)}'),
-                  trailing: const Icon(Icons.edit, size: 18),
-                  onTap: () => _showPriceEditor(context, zakatProv),
-                ),
-                const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: zakatProv.isFetchingPrices
-                              ? null
-                              : () async {
-                                  final res = await zakatProv.fetchAndApplyMarketPrices();
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(res.message),
-                                        backgroundColor: res.isLiveApi ? AppColors.emeraldPrimary : AppColors.goldDark,
-                                      ),
-                                    );
-                                  }
-                                },
-                          icon: zakatProv.isFetchingPrices
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.cloud_sync_outlined),
-                          label: Text(
-                            zakatProv.isFetchingPrices ? 'جاري الاتصال بالسوق...' : 'تحديث الأسعار الآن (عبر الإنترنت)',
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                          style: ElevatedButton.styleFrom(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        zakatProv.reloadPricesFromPreferences();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('تمت مزامنة وتحديث الأسعار الرسمية بنجاح.'),
                             backgroundColor: AppColors.emeraldPrimary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            behavior: SnackBarBehavior.floating,
                           ),
-                        ),
+                        );
+                      },
+                      icon: const Icon(Icons.sync),
+                      label: const Text(
+                        'مزامنة وتحديث الأسعار من خادم الهيئة',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        zakatProv.lastPricesResult != null
-                            ? 'آخر تحديث: ${zakatProv.lastPricesResult!.isLiveApi ? "مباشر عبر الإنترنت" : "الأسعار السائدة المعتمدة"} (${zakatProv.lastPricesResult!.updatedAt.hour}:${zakatProv.lastPricesResult!.updatedAt.minute.toString().padLeft(2, "0")})'
-                            : 'اضغط لجلب آخر تحديث لحظي للذهب والفضة من السوق',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                        textAlign: TextAlign.center,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.emeraldPrimary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Encrypted Backup & Data Recovery
+          const Text('النسخ الاحتياطي والأمان واستعادة البيانات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.cloud_upload_outlined, color: AppColors.emeraldPrimary),
+                  title: const Text('تصدير نسخة احتياطية مشفرة (AES-256)'),
+                  subtitle: const Text('حفظ ومشاركة سجلاتك وأحوالك ومفضلاتك بملف مشفر آمن'),
+                  trailing: const Icon(Icons.share, size: 18),
+                  onTap: () => _exportAndShareBackup(context),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.settings_backup_restore, color: AppColors.goldDark),
+                  title: const Text('استعادة البيانات من نسخة مشفرة'),
+                  subtitle: const Text('استرجاع العمليات والأحوال من ملف أو كود النسخة الاحتياطية'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () => _showRestoreDialog(context),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Official Contact & Authority Info Card (Synced from Web Admin)
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: AppColors.emeraldPrimary.withValues(alpha: 0.2)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.headset_mic_outlined, color: AppColors.emeraldPrimary, size: 22),
+                      SizedBox(width: 8),
+                      Text(
+                        'قنوات التواصل الرسمية وخدمة الجمهور',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                  if (cloudSync.maintenanceMode) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade700),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.build_circle_outlined, color: Colors.amber.shade900, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'تنبيه: النظام في وضع الصيانة الدورية المجدولة لتحديث الخوادم.',
+                              style: TextStyle(fontSize: 11, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.phone_in_talk, color: AppColors.emeraldPrimary, size: 20),
+                    title: const Text('الرقم المجاني الموحد لخدمة المواطنين والشكاوى:'),
+                    subtitle: Text(cloudSync.hotline, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.emeraldDark)),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.chat_bubble_outline, color: Colors.green, size: 20),
+                    title: const Text('واتساب خدمة الجمهور والاستفسارات:'),
+                    subtitle: Text(cloudSync.whatsapp, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.email_outlined, color: Colors.blue, size: 20),
+                    title: const Text('البريد الإلكتروني المعتمد للدعم والطلبات:'),
+                    subtitle: Text(cloudSync.officialEmail, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),

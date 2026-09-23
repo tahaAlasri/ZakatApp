@@ -19,7 +19,6 @@ class MoneyCalcScreen extends StatefulWidget {
 class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
-  final _goldPriceController = TextEditingController();
   final _receivablesController = TextEditingController();
   final _liabilitiesController = TextEditingController();
   bool _useSilverNisab = false;
@@ -30,10 +29,7 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
   @override
   void initState() {
     super.initState();
-    final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-    _goldPriceController.text = zakatProv.gold24Price.toStringAsFixed(0);
     _amountController.addListener(_onInputChanged);
-    _goldPriceController.addListener(_onInputChanged);
     _receivablesController.addListener(_onInputChanged);
     _liabilitiesController.addListener(_onInputChanged);
   }
@@ -51,73 +47,24 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
   @override
   void dispose() {
     _amountController.removeListener(_onInputChanged);
-    _goldPriceController.removeListener(_onInputChanged);
     _receivablesController.removeListener(_onInputChanged);
     _liabilitiesController.removeListener(_onInputChanged);
     _amountController.dispose();
-    _goldPriceController.dispose();
     _receivablesController.dispose();
     _liabilitiesController.dispose();
     super.dispose();
   }
 
-  Future<void> _calculate() async {
+  void _calculate() {
     if (!_formKey.currentState!.validate()) return;
 
     final amountText = AppInputFormatters.normalizeArabicNumbers(_amountController.text.trim());
-    final goldPriceText = AppInputFormatters.normalizeArabicNumbers(_goldPriceController.text.trim());
     final amount = double.tryParse(amountText) ?? 0.0;
-    final goldPrice = double.tryParse(goldPriceText) ?? 0.0;
     final receivables = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_receivablesController.text.trim())) ?? 0.0;
     final liabilities = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_liabilitiesController.text.trim())) ?? 0.0;
 
     final zakatProv = Provider.of<ZakatProvider>(context, listen: false);
-    final effectivePrice = _useSilverNisab ? zakatProv.silverPrice : goldPrice;
-    final nisabThreshold = _useSilverNisab ? (595.0 * effectivePrice) : (85.0 * effectivePrice);
-    final netWorth = (amount + receivables) - liabilities;
-    final isNear = zakatProv.isCloseToNisab(netWorth, nisabThreshold);
-
-    if (isNear && !_isPriceConfirmed) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.amber),
-              SizedBox(width: 8),
-              Text('تأكيد سعر النصاب'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('صافي الوعاء الزكوي (${netWorth.toStringAsFixed(0)} ${zakatProv.currency}) قريب جداً من حد النصاب الشرعي (${nisabThreshold.toStringAsFixed(0)} ${zakatProv.currency}).'),
-              const SizedBox(height: 8),
-              Text('المصدر: ${zakatProv.currentPriceSnapshot.source}'),
-              const SizedBox(height: 8),
-              const Text('نظراً لأن تغير سعر الذهب/الفضة قد يقلب وجوب الزكاة، يرجى تأكيد السعر قبل اعتماد النتيجة.'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('مراجعة السعر'),
-            ),
-            ElevatedButton(
-              key: const Key('btn_confirm_price_near_nisab_dialog'),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('تأكيد السعر والمتابعة'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed != true) return;
-      setState(() {
-        _isPriceConfirmed = true;
-      });
-    }
+    final goldPrice = zakatProv.gold24Price;
 
     final res = zakatProv.calculateMoneyZakat(
       amount,
@@ -135,7 +82,7 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('تم احتساب زكاة المال بنجاح'),
+        content: Text('تم احتساب زكاة المال بنجاح وفق التسعيرة الرسمية'),
         backgroundColor: AppColors.emeraldPrimary,
         duration: Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
@@ -147,13 +94,16 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
   Widget build(BuildContext context) {
     final zakatProv = Provider.of<ZakatProvider>(context);
     final favProv = Provider.of<FavoritesProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     const favId = 'calc_money';
     final isFav = favProv.isFavorite(favId);
 
+    final nisabAmount = _useSilverNisab
+        ? (595.0 * zakatProv.silverPrice)
+        : (85.0 * zakatProv.gold24Price);
+
     final enteredAmount = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_amountController.text.trim())) ?? 0.0;
-    final enteredGoldPrice = double.tryParse(AppInputFormatters.normalizeArabicNumbers(_goldPriceController.text.trim())) ?? zakatProv.gold24Price;
-    final nisabThreshold = 85.0 * enteredGoldPrice;
-    final isNearNisab = enteredAmount > 0 && zakatProv.isCloseToNisab(enteredAmount, nisabThreshold);
+    final isNearNisab = enteredAmount > 0 && zakatProv.isCloseToNisab(enteredAmount, nisabAmount);
 
     return Scaffold(
       appBar: AppBar(
@@ -224,7 +174,7 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'تجب الزكاة بنسبة ربع العشر (2.5%) إذا بلغ المال نصاب 85 جرام ذهب خالص (عيار 24) وحال عليه الحول.',
+                              'تجب الزكاة بنسبة ربع العشر (2.5%) إذا بلغ المال نصاب 85 جرام ذهب خالص (عيار 24) وحال عليه الحول، وفق التسعيرة المعتمدة من الهيئة.',
                               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                             ),
                           ],
@@ -235,6 +185,36 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              // Official Nisab Info Card
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkCard : AppColors.goldLight.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.goldAccent.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.verified, color: AppColors.goldDark, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          _useSilverNisab ? 'نصاب الفضة المعتمد (595 جم):' : 'نصاب الذهب المعتمد (85 جم):',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${nisabAmount.toStringAsFixed(0)} ${zakatProv.currency}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.goldDark),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
 
               // Form Inputs
               TextFormField(
@@ -247,20 +227,12 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
                   suffixText: zakatProv.currency,
                   prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.emeraldPrimary),
                 ),
-                validator: AppValidators.requiredPositiveNumber('المبلغ المدخر'),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _goldPriceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [AppInputFormatters.decimal],
-                decoration: InputDecoration(
-                  labelText: 'سعر جرام الذهب عيار 24 اليوم (المعتمد للنصاب)',
-                  suffixText: zakatProv.currency,
-                  prefixIcon: const Icon(Icons.price_change_outlined, color: AppColors.goldAccent),
-                ),
-                validator: AppValidators.requiredPositiveNumber('سعر جرام الذهب عيار 24'),
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) return 'يرجى إدخال المبلغ';
+                  final v = double.tryParse(AppInputFormatters.normalizeArabicNumbers(val.trim()));
+                  if (v == null || v <= 0) return 'يرجى إدخال قيمة أكبر من الصفر';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
 
@@ -298,7 +270,7 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
                 title: const Text('اعتماد نصاب الفضة (595 جراماً)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                 subtitle: const Text('قول معتبر وأحظ لمصلحة الفقراء في الأوراق النقدية المعاصرة', style: TextStyle(fontSize: 12)),
                 value: _useSilverNisab,
-                activeColor: AppColors.emeraldPrimary,
+                activeThumbColor: AppColors.emeraldPrimary,
                 onChanged: (val) {
                   setState(() {
                     _useSilverNisab = val;
@@ -333,7 +305,7 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
                   categoryKey: 'money',
                   totalWealth: double.tryParse(AppInputFormatters.normalizeArabicNumbers(_amountController.text.trim())) ?? 0.0,
                   currency: zakatProv.currency,
-                  appliedPrice: double.tryParse(AppInputFormatters.normalizeArabicNumbers(_goldPriceController.text.trim())),
+                  appliedPrice: _useSilverNisab ? zakatProv.silverPrice : zakatProv.gold24Price,
                   pdfFileName: 'zakat_money_receipt.pdf',
                   pdfTitle: 'إقرار زكاة الأموال والنقود',
                 ),

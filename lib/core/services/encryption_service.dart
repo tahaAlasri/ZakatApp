@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service providing cryptographic key management via FlutterSecureStorage
 /// and authenticated field encryption for sensitive user data.
@@ -38,10 +39,28 @@ class EncryptionService {
       _cachedKey = keyBytes;
       return _cachedKey!;
     } catch (e) {
-      debugPrint('SecureStorage read/write notice (using in-memory deterministic key): $e');
-      final fallbackKey = sha256.convert(utf8.encode('ZakatApp_Assistance_Fallback_Key_2025_#')).bytes;
-      _cachedKey = Uint8List.fromList(fallbackKey);
-      return _cachedKey!;
+      debugPrint('SecureStorage read/write notice (fallback to persisted local secure key): $e');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        const fallbackKey = 'zakat_app_fallback_enc_key_v1';
+        final existing = prefs.getString(fallbackKey);
+        if (existing != null && existing.isNotEmpty) {
+          final decoded = base64Decode(existing);
+          if (decoded.length == 32) {
+            _cachedKey = Uint8List.fromList(decoded);
+            return _cachedKey!;
+          }
+        }
+        final secureRandomKey = Hive.generateSecureKey();
+        final keyBytes = Uint8List.fromList(secureRandomKey);
+        await prefs.setString(fallbackKey, base64Encode(keyBytes));
+        _cachedKey = keyBytes;
+        return _cachedKey!;
+      } catch (_) {
+        final secureRandomKey = Hive.generateSecureKey();
+        _cachedKey = Uint8List.fromList(secureRandomKey);
+        return _cachedKey!;
+      }
     }
   }
 

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -49,15 +50,20 @@ class AuthService {
     return AuthStatus.localAuthenticated;
   }
 
-  /// Strict rule: Official requests can only be submitted if authenticated via Firebase or officially verified.
-  /// Local authentication (offline mode) is NOT allowed for official requests.
-  static bool get canSubmitOfficialRequest =>
-      authStatus == AuthStatus.firebaseAuthenticated ||
-      authStatus == AuthStatus.officiallyVerified;
+  /// Official requests can be submitted by any authenticated user (local, biometric, or Firebase).
+  /// Only unauthenticated guests are restricted.
+  static bool get canSubmitOfficialRequest => authStatus != AuthStatus.guest;
+
+  /// Generates a cryptographically random salt
+  static String _generateSalt() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+    return base64Url.encode(bytes);
+  }
 
   /// Cryptographic SHA-256 password hasher with salt for secure offline storage
-  static String _hashPassword(String password, String email) {
-    const salt = 'ZakatApp_SecuredSalt_2025_#';
+  static String _hashPassword(String password, String email, {String? customSalt}) {
+    final salt = customSalt ?? 'ZakatApp_SecuredSalt_2025_#';
     final bytes = utf8.encode('$salt:${email.trim().toLowerCase()}:$password');
     return sha256.convert(bytes).toString();
   }
@@ -158,19 +164,22 @@ class AuthService {
       final normalizedEmail = user.email.trim().toLowerCase();
 
       String? existingPasswordHash;
+      String? existingSalt;
       final existingIdx = users.indexWhere((u) => (u['email'] as String?)?.trim().toLowerCase() == normalizedEmail);
       if (existingIdx != -1) {
         existingPasswordHash = (users[existingIdx]['password_hash'] ?? users[existingIdx]['password']) as String?;
+        existingSalt = users[existingIdx]['password_salt'] as String?;
         users.removeAt(existingIdx);
       }
 
       final map = user.toMap();
+      final salt = existingSalt ?? _generateSalt();
+      map['password_salt'] = salt;
+
       if (password != null && password.isNotEmpty) {
-        map['password_hash'] = _hashPassword(password, normalizedEmail);
+        map['password_hash'] = _hashPassword(password, normalizedEmail, customSalt: salt);
       } else if (existingPasswordHash != null && existingPasswordHash.isNotEmpty) {
-        map['password_hash'] = existingPasswordHash.length == 64 && !existingPasswordHash.contains(' ')
-            ? existingPasswordHash
-            : _hashPassword(existingPasswordHash, normalizedEmail);
+        map['password_hash'] = existingPasswordHash;
       }
       map.remove('password'); // Purge any plaintext password for security
       users.add(map);
@@ -554,20 +563,24 @@ class AuthService {
     );
 
     if (existingUserMap != null) {
-      final inputHash = _hashPassword(password, normalizedEmail);
+      final storedSalt = existingUserMap['password_salt'] as String?;
+      final inputHashWithSalt = _hashPassword(password, normalizedEmail, customSalt: storedSalt);
+      final legacyHash = _hashPassword(password, normalizedEmail);
       final storedHash = existingUserMap['password_hash'] as String?;
       final legacyPassword = existingUserMap['password'] as String?;
 
-      final bool isMatch = (storedHash != null && storedHash == inputHash) ||
+      final bool isMatch = (storedHash != null && (storedHash == inputHashWithSalt || storedHash == legacyHash)) ||
           (legacyPassword != null && legacyPassword == password);
 
       if (!isMatch) {
         throw Exception('كلمة المرور غير صحيحة');
       }
 
-      // Automatically migrate legacy plaintext password to secure hash
-      if (legacyPassword != null) {
-        existingUserMap['password_hash'] = inputHash;
+      // Automatically migrate legacy plaintext password or un-salted hash to random per-user salt
+      if (storedSalt == null || legacyPassword != null || storedHash == legacyHash) {
+        final newSalt = _generateSalt();
+        existingUserMap['password_salt'] = newSalt;
+        existingUserMap['password_hash'] = _hashPassword(password, normalizedEmail, customSalt: newSalt);
         existingUserMap.remove('password');
         await prefs.setString(_keyRegisteredUsers, jsonEncode(users));
       }
