@@ -242,22 +242,30 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
                         border: Border.all(color: AppColors.goldAccent.withValues(alpha: 0.4)),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.zakatType != null ? 'المقدار المحسوب (${widget.zakatType}):' : 'المقدار الواجب إخراجه:',
-                                style: const TextStyle(color: Colors.white70, fontSize: 11),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                AppFormatters.formatCurrency(widget.suggestedAmount!),
-                                style: const TextStyle(color: AppColors.goldLight, fontWeight: FontWeight.bold, fontSize: 18),
-                              ),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.zakatType != null ? 'المقدار المحسوب (${widget.zakatType}):' : 'المقدار الواجب إخراجه:',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: AlignmentDirectional.centerStart,
+                                  child: Text(
+                                    AppFormatters.formatCurrency(widget.suggestedAmount!),
+                                    style: const TextStyle(color: AppColors.goldLight, fontWeight: FontWeight.bold, fontSize: 18),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           ElevatedButton.icon(
                             onPressed: () {
                               Clipboard.setData(ClipboardData(text: widget.suggestedAmount!.toStringAsFixed(0)));
@@ -274,7 +282,10 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             ),
                             icon: const Icon(Icons.copy, size: 14),
-                            label: const Text('نسخ المبلغ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            label: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('نسخ المبلغ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            ),
                           ),
                         ],
                       ),

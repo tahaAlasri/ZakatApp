@@ -97,7 +97,6 @@ class ZakatApp extends StatelessWidget {
       locale: const Locale('ar'),
       supportedLocales: const [
         Locale('ar'),
-        Locale('en'),
       ],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
