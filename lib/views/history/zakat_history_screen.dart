@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/pdf_service.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../models/zakat_record.dart';
 import '../../providers/zakat_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -179,8 +180,11 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('سجل العمليات الزكوية الشامل'),
-        centerTitle: true,
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text('سجل العمليات الزكوية الشامل'),
+        ),
+        centerTitle: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
@@ -229,10 +233,14 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Filter & Search Controls Card
-          Container(
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ResponsiveConstraint(
+          maxWidth: 800,
+          child: Column(
+            children: [
+              // Filter & Search Controls Card
+              Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkSurface : Colors.white,
@@ -298,10 +306,14 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                 const SizedBox(height: 8),
 
                 // Quick Filters Row (Nisab Switch & Sort)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Switch.adaptive(
                           value: _onlyReachedNisab,
@@ -331,26 +343,36 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
 
           // Summary Stats Strip
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             color: isDark ? AppColors.darkCard : AppColors.emeraldSubtle,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.calculate_outlined, size: 18, color: AppColors.emeraldPrimary),
-                    const SizedBox(width: 6),
-                    Text(
-                      'العمليات: ${filtered.length} (مستوفية: $filteredNisabCount)',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calculate_outlined, size: 18, color: AppColors.emeraldPrimary),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'العمليات: ${filtered.length} (مستوفية: $filteredNisabCount)',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Text(
-                  filteredZakatByCurrency.isEmpty
-                      ? 'الزكاة: 0 ${zakatProv.currency}'
-                      : 'الزكاة: ${filteredZakatByCurrency.entries.map((e) => '${AppFormatters.formatNumber(e.value, decimals: 0)} ${e.key}').join(' | ')}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.emeraldPrimary),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      filteredZakatByCurrency.isEmpty
+                          ? 'الزكاة: 0 ${zakatProv.currency}'
+                          : 'الزكاة: ${filteredZakatByCurrency.entries.map((e) => '${AppFormatters.formatNumber(e.value, decimals: 0)} ${e.key}').join(' | ')}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.emeraldPrimary),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -360,8 +382,8 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
           Expanded(
             child: filtered.isEmpty
                 ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -369,15 +391,16 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                             _searchQuery.isNotEmpty || _selectedCategoryGroup != 'all'
                                 ? Icons.filter_list_off
                                 : Icons.receipt_long_outlined,
-                            size: 64,
+                            size: 56,
                             color: Colors.grey.shade400,
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 14),
                           Text(
                             _searchQuery.isNotEmpty || _selectedCategoryGroup != 'all'
                                 ? 'لا توجد عمليات تطابق البحث أو الفلتر المحدد'
                                 : 'سجل العمليات فارغ حتى الآن',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -385,14 +408,14 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                                 ? 'جرّب تعديل نص البحث أو اختيار صنف آخر'
                                 : 'عند إتمامك لأي حساب زكوي وحفظه، سيظهر تلقائياً هنا في السجل.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
                           ),
                         ],
                       ),
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: context.rPadding(horizontal: 16, vertical: 12),
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final rec = filtered[index];
@@ -416,26 +439,33 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 18,
-                                        backgroundColor: rec.reachedNisab
-                                            ? AppColors.emeraldSubtle
-                                            : Colors.orange.shade50,
-                                        child: Icon(
-                                          rec.reachedNisab ? Icons.check_circle : Icons.info_outline,
-                                          color: rec.reachedNisab ? AppColors.emeraldPrimary : Colors.orange,
-                                          size: 20,
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 18,
+                                          backgroundColor: rec.reachedNisab
+                                              ? AppColors.emeraldSubtle
+                                              : Colors.orange.shade50,
+                                          child: Icon(
+                                            rec.reachedNisab ? Icons.check_circle : Icons.info_outline,
+                                            color: rec.reachedNisab ? AppColors.emeraldPrimary : Colors.orange,
+                                            size: 20,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Text(
-                                        rec.typeName,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            rec.typeName,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
@@ -468,28 +498,46 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                                   children: [
                                     if (rec.totalWealth > 0)
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          const Text('الوعاء / المال الخاضع:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                          Text(
-                                            '${AppFormatters.formatNumber(rec.totalWealth, decimals: 0)} ${rec.currency}',
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          const Expanded(
+                                            child: Text(
+                                              'الوعاء / المال الخاضع:',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Text(
+                                              '${AppFormatters.formatNumber(rec.totalWealth, decimals: 0)} ${rec.currency}',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                            ),
                                           ),
                                         ],
                                       ),
                                     if (rec.totalWealth > 0) const SizedBox(height: 4),
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        const Text('الزكاة الواجبة:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                        Text(
-                                          rec.reachedNisab
-                                              ? '${AppFormatters.formatNumber(rec.zakatAmount, decimals: 2)} ${rec.currency}'
-                                              : 'لا تجب الزكاة',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                            color: rec.reachedNisab ? AppColors.emeraldPrimary : Colors.brown,
+                                        const Expanded(
+                                          child: Text(
+                                            'الزكاة الواجبة:',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            rec.reachedNisab
+                                                ? '${AppFormatters.formatNumber(rec.zakatAmount, decimals: 2)} ${rec.currency}'
+                                                : 'لا تجب الزكاة',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: rec.reachedNisab ? AppColors.emeraldPrimary : Colors.brown,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -498,7 +546,6 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                                       const SizedBox(height: 4),
                                       Row(
                                         crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           const Text('المقدار عيناً:', style: TextStyle(fontSize: 12, color: Colors.grey)),
                                           const SizedBox(width: 8),
@@ -515,17 +562,23 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                                     if (rec.appliedPrice != null && rec.appliedPrice! > 0) ...[
                                       const SizedBox(height: 4),
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(
-                                            rec.goldKarat != null
-                                                ? 'السعر المعتمد (عيار ${rec.goldKarat}):'
-                                                : 'السعر المعتمد للوحدة:',
-                                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                          Expanded(
+                                            child: Text(
+                                              rec.goldKarat != null
+                                                  ? 'السعر المعتمد (عيار ${rec.goldKarat}):'
+                                                  : 'السعر المعتمد للوحدة:',
+                                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
-                                          Text(
-                                            '${AppFormatters.formatNumber(rec.appliedPrice!, decimals: 2)} ${rec.currency}',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                          const SizedBox(width: 6),
+                                          FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Text(
+                                              '${AppFormatters.formatNumber(rec.appliedPrice!, decimals: 2)} ${rec.currency}',
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -533,12 +586,21 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                                     if (rec.nisabThreshold != null && rec.nisabThreshold! > 0) ...[
                                       const SizedBox(height: 4),
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          const Text('النصاب وقت العملية:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                          Text(
-                                            '${AppFormatters.formatNumber(rec.nisabThreshold!, decimals: 2)} ${rec.currency}',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                          const Expanded(
+                                            child: Text(
+                                              'النصاب وقت العملية:',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Text(
+                                              '${AppFormatters.formatNumber(rec.nisabThreshold!, decimals: 2)} ${rec.currency}',
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -630,27 +692,31 @@ class _ZakatHistoryScreenState extends State<ZakatHistoryScreen> {
                       );
                     },
                   ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
       bottomNavigationBar: filtered.isNotEmpty
           ? Container(
-              padding: const EdgeInsets.all(16),
+              padding: context.rPadding(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkSurface : Colors.white,
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -3)),
                 ],
               ),
-              child: ElevatedButton.icon(
-                onPressed: () => _exportAnnualStatement(context, filtered),
-                icon: const Icon(Icons.picture_as_pdf),
-                label: const Text('تصدير كشف الحساب السنوي المجمع (PDF)'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.emeraldPrimary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: SafeArea(
+                child: ElevatedButton.icon(
+                  onPressed: () => _exportAnnualStatement(context, filtered),
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('تصدير كشف الحساب السنوي المجمع (PDF)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.emeraldPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
               ),
             )

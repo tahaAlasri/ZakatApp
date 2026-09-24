@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/app_input_formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/category_icon_badge.dart';
 import '../../core/widgets/zakat_result_card.dart';
 import '../../models/favorite_item.dart';
@@ -122,9 +123,11 @@ class _CropsCalcScreenState extends State<CropsCalcScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
+        padding: context.rPadding(horizontal: 16, vertical: 16),
+        child: ResponsiveConstraint(
+          maxWidth: 680,
+          child: Form(
+            key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -269,6 +272,7 @@ class _CropsCalcScreenState extends State<CropsCalcScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

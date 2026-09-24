@@ -14,6 +14,8 @@ class PreferencesService {
   static const String _keyGold21Price = 'custom_gold_21_price';
   static const String _keyGold18Price = 'custom_gold_18_price';
   static const String _keySilverPrice = 'custom_silver_price';
+  static const String _keyGold24Aden = 'gold_24_aden';
+  static const String _keySilverAden = 'silver_aden';
   static const String _keyNotificationsEnabled = 'notifications_enabled';
   static const String _keyMarketCity = 'market_city';
   static const String _keyLastKnownWheatPrice = 'last_known_wheat_price';
@@ -95,6 +97,16 @@ class PreferencesService {
   static double get silverPrice => _prefs?.getDouble(_keySilverPrice) ?? 700.0;
   static Future<void> setSilverPrice(double price) async {
     await _prefs?.setDouble(_keySilverPrice, price);
+  }
+
+  static double? get gold24Aden => _prefs?.getDouble(_keyGold24Aden);
+  static Future<void> setGold24Aden(double price) async {
+    await _prefs?.setDouble(_keyGold24Aden, price);
+  }
+
+  static double? get silverAden => _prefs?.getDouble(_keySilverAden);
+  static Future<void> setSilverAden(double price) async {
+    await _prefs?.setDouble(_keySilverAden, price);
   }
 
   // Notifications Enabled
@@ -197,5 +209,18 @@ class PreferencesService {
   static Future<void> setCachedBankAccounts(List<Map<String, dynamic>> accounts) async {
     final raw = jsonEncode(accounts);
     await _prefs?.setString(_keyCachedBankAccounts, raw);
+  }
+
+  // App Lock Paused Timestamp for Auto Lock
+  static const String _keyLastPausedTimestamp = 'last_app_paused_timestamp_ms';
+
+  static int? get lastPausedTimestamp => _prefs?.getInt(_keyLastPausedTimestamp);
+
+  static Future<void> setLastPausedTimestamp(int? timestampMs) async {
+    if (timestampMs == null) {
+      await _prefs?.remove(_keyLastPausedTimestamp);
+    } else {
+      await _prefs?.setInt(_keyLastPausedTimestamp, timestampMs);
+    }
   }
 }

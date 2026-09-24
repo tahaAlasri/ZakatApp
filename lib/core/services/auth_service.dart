@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/user_model.dart';
 import 'biometrics_service.dart';
@@ -20,7 +22,75 @@ class AuthService {
   static const String _keyRegisteredUsers = 'auth_registered_users';
   static const String _keyLastKnownUser = 'auth_last_known_user';
 
-  static final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  /// Firebase Auth instance
+  static FirebaseAuth? get _firebaseAuth {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseAuth.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Firestore instance for saving/reading user profiles
+  static FirebaseFirestore? get _firestore {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Save user profile document to Firestore users/{uid}
+  /// Only saves if user is authenticated with Firebase Auth
+  static Future<void> _saveUserToFirestore(UserModel user, {bool includeCreatedAt = false}) async {
+    try {
+      final fs = _firestore;
+      if (fs == null) return;
+      final fbUser = _firebaseAuth?.currentUser;
+      if (fbUser == null || fbUser.uid != user.id) return;
+
+      final data = <String, dynamic>{
+        'name': user.name,
+        'email': user.email,
+        'phone': user.phone,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (includeCreatedAt) {
+        data['createdAt'] = FieldValue.serverTimestamp();
+      }
+      await fs.collection('users').doc(user.id).set(
+        data,
+        SetOptions(merge: true),
+      ).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('Error saving user to Firestore: \$e');
+    }
+  }
+
+  /// Read user profile from Firestore users/{uid}
+  static Future<UserModel?> _readUserFromFirestore(String uid) async {
+    try {
+      final fs = _firestore;
+      if (fs == null) return null;
+      final docSnap = await fs.collection('users').doc(uid).get()
+          .timeout(const Duration(seconds: 5));
+      if (!docSnap.exists) return null;
+      final data = docSnap.data();
+      if (data == null) return null;
+      return UserModel(
+        id: uid,
+        name: data['name']?.toString() ?? '',
+        email: data['email']?.toString() ?? '',
+        phone: data['phone']?.toString() ?? '',
+        isBiometricEnabled: data['isBiometricEnabled'] == true,
+      );
+    } catch (e) {
+      debugPrint('Error reading user from Firestore: \$e');
+      return null;
+    }
+  }
   static AuthStatus? _overrideAuthStatus;
 
   @visibleForTesting
@@ -40,7 +110,7 @@ class AuthService {
     if (user == null) {
       return AuthStatus.guest;
     }
-    final fbUser = _firebaseAuth.currentUser;
+    final fbUser = _firebaseAuth?.currentUser;
     if (fbUser != null) {
       if (fbUser.emailVerified) {
         return AuthStatus.officiallyVerified;
@@ -78,7 +148,13 @@ class AuthService {
   static bool get hasRegisteredAccount => _lastKnownUser != null;
 
   /// Returns true if currently authenticated with Firebase
-  static bool get isFirebaseAuthenticated => _firebaseAuth.currentUser != null;
+  static bool get isFirebaseAuthenticated {
+    try {
+      return _firebaseAuth?.currentUser != null;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Validates that a name is a legitimate user full name and NOT:
   /// - null or empty
@@ -218,7 +294,7 @@ class AuthService {
     _lastKnownUser = _getLastKnownUser(prefs) ?? _findUserInRegistry(prefs);
 
     // Check if Firebase already has an active session
-    final fbUser = _firebaseAuth.currentUser;
+    final fbUser = _firebaseAuth?.currentUser;
     if (fbUser != null) {
       final email = fbUser.email ?? '';
       String? name = _cleanName(fbUser.displayName, email);
@@ -235,6 +311,15 @@ class AuthService {
         }
       }
 
+      // قراءة بيانات المستخدم من Firestore لضمان دقة البيانات
+      UserModel? firestoreUser;
+      try {
+        firestoreUser = await _readUserFromFirestore(fbUser.uid);
+        if (name == null && firestoreUser != null) {
+          name = _cleanName(firestoreUser.name, email);
+        }
+      } catch (_) {}
+
       // If we found a clean name from registry but Firebase lacked it, sync it to Firebase
       if (name != null && _cleanName(fbUser.displayName, email) == null) {
         try {
@@ -247,7 +332,11 @@ class AuthService {
         id: fbUser.uid,
         name: name ?? 'المستخدم',
         email: email,
-        phone: (regUser?.phone.isNotEmpty == true) ? regUser!.phone : (fbUser.phoneNumber ?? '777000111'),
+        phone: (regUser?.phone.isNotEmpty == true)
+            ? regUser!.phone
+            : (firestoreUser != null && firestoreUser.phone.isNotEmpty)
+                ? firestoreUser.phone
+                : (fbUser.phoneNumber ?? '777000111'),
         profileImagePath: regUser?.profileImagePath,
         isBiometricEnabled: regUser?.isBiometricEnabled ?? PreferencesService.isBiometricEnabled,
       );
@@ -289,7 +378,11 @@ class AuthService {
 
     try {
       // 1. Attempt Firebase Authentication
-      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+      final auth = _firebaseAuth;
+      if (auth == null) {
+        return await _fallbackLocalSignIn(email: normalizedEmail, password: password, prefs: prefs);
+      }
+      final credential = await auth.signInWithEmailAndPassword(
         email: normalizedEmail,
         password: password,
       );
@@ -300,6 +393,15 @@ class AuthService {
       final regUser = _findUserInRegistry(prefs, normalizedEmail);
       if (name == null && regUser != null) {
         name = _cleanName(regUser.name, normalizedEmail);
+      }
+
+      // قراءة بيانات المستخدم من Firestore
+      UserModel? firestoreUser;
+      if (fbUser != null) {
+        firestoreUser = await _readUserFromFirestore(fbUser.uid);
+      }
+      if (name == null && firestoreUser != null) {
+        name = _cleanName(firestoreUser.name, normalizedEmail);
       }
 
       if (name == null) {
@@ -320,7 +422,9 @@ class AuthService {
       final resolvedName = name ?? 'المستخدم';
       final phone = (regUser != null && regUser.phone.isNotEmpty)
           ? regUser.phone
-          : (fbUser?.phoneNumber ?? '777000111');
+          : (firestoreUser != null && firestoreUser.phone.isNotEmpty)
+              ? firestoreUser.phone
+              : (fbUser?.phoneNumber ?? '777000111');
       final imagePath = regUser?.profileImagePath;
 
       final user = UserModel(
@@ -331,6 +435,9 @@ class AuthService {
         profileImagePath: imagePath,
         isBiometricEnabled: PreferencesService.isBiometricEnabled,
       );
+
+      // حفظ/تحديث بيانات المستخدم في Firestore
+      await _saveUserToFirestore(user);
 
       await _saveSession(prefs, user);
       await _saveUserToRegistry(prefs, user, password);
@@ -371,7 +478,18 @@ class AuthService {
 
     try {
       // 1. Attempt Firebase Authentication Registration
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+      final auth = _firebaseAuth;
+      if (auth == null) {
+        return await _fallbackLocalSignUp(
+          name: cleanName,
+          email: normalizedEmail,
+          phone: phone,
+          password: password,
+          profileImagePath: profileImagePath,
+          prefs: prefs,
+        );
+      }
+      final credential = await auth.createUserWithEmailAndPassword(
         email: normalizedEmail,
         password: password,
       );
@@ -390,6 +508,9 @@ class AuthService {
         profileImagePath: profileImagePath,
         isBiometricEnabled: true,
       );
+
+      // حفظ بيانات المستخدم في Firestore لضمان ظهورها في لوحة التحكم
+      await _saveUserToFirestore(user, includeCreatedAt: true);
 
       await _saveUserToRegistry(prefs, user, password);
       await _saveSession(prefs, user);
@@ -429,7 +550,7 @@ class AuthService {
   }
 
   /// Sign In with Biometrics (Local Authentication)
-  static Future<UserModel?> signInWithBiometrics({String? hintEmail}) async {
+  static Future<UserModel?> signInWithBiometrics({String? hintEmail, String? password}) async {
     final bool isAvailable = await BiometricsService.isBiometricsAvailable();
     if (!isAvailable) {
       throw Exception('جهازك لا يدعم المصادقة بالبصمة أو لم يتم تفعيلها في إعدادات النظام');
@@ -449,8 +570,51 @@ class AuthService {
     candidateUser ??= _getLastKnownUser(prefs);
     candidateUser ??= _findUserInRegistry(prefs);
 
+    // If candidateUser is null locally, but Firebase already has an active session
+    if (candidateUser == null && _firebaseAuth?.currentUser != null) {
+      final fb = _firebaseAuth!.currentUser!;
+      final fireUser = await _readUserFromFirestore(fb.uid);
+      candidateUser = fireUser ?? UserModel(
+        id: fb.uid,
+        name: fb.displayName ?? 'المستخدم',
+        email: fb.email ?? emailCandidate,
+        phone: fb.phoneNumber ?? '',
+      );
+    }
+
+    // إذا لم يكن المستخدم مسجلاً محلياً بعد لكنه أدخل كلمة المرور والبريد في الشاشة:
+    // نقوم بتأكيد البصمة ثم تسجيل الدخول مباشرة في Firebase وتفعيل البصمة
+    if (candidateUser == null && emailCandidate.isNotEmpty && password != null && password.isNotEmpty) {
+      final bool authenticated = await BiometricsService.authenticate(
+        localizedReason: 'يرجى تأكيد البصمة لربط حسابك وتسجيل الدخول لتطبيق الزكاة',
+      );
+      if (!authenticated) {
+        return null;
+      }
+      return await signIn(email: emailCandidate, password: password);
+    }
+
+    // إذا لم يتم العثور على المستخدم محلياً ولم تتوفر كلمة المرور:
+    // نتحقق أولاً من وجود حسابه في Firebase حتى لا تظهر رسالة مضللة
     if (candidateUser == null) {
-      throw Exception('لا يوجد حساب مسجل على هذا الجهاز، يرجى تسجيل الدخول بالبريد أولاً لتمكين الدخول بالبصمة');
+      if (emailCandidate.isNotEmpty) {
+        try {
+          final query = await _firestore
+              ?.collection('users')
+              .where('email', isEqualTo: emailCandidate)
+              .limit(1)
+              .get();
+          if (query != null && query.docs.isNotEmpty) {
+            final userName = query.docs.first.data()['name'] ?? '';
+            final nameText = (userName is String && userName.isNotEmpty) ? ' ($userName)' : '';
+            throw Exception('تم التحقق: حسابك مسجل في قاعدة البيانات$nameText! لربط بصمة هذا الجهاز بحسابك لأول مرة، يرجى إدخال كلمة المرور والضغط على "دخول".');
+          }
+        } catch (e) {
+          if (e.toString().contains('تم التحقق: حسابك مسجل')) rethrow;
+          debugPrint('Firestore lookup error: $e');
+        }
+      }
+      throw Exception('لا يوجد حساب مسجل بهذا البريد. إذا كان لديك حساب، يرجى إدخال كلمة المرور والضغط على "دخول" لمرة واحدة لربطه بالبصمة.');
     }
 
     final cleanName = _cleanName(candidateUser.name, candidateUser.email) ?? 'المستخدم';
@@ -470,6 +634,7 @@ class AuthService {
 
     await _saveSession(prefs, user);
     await PreferencesService.setSavedEmail(user.email);
+    await PreferencesService.setBiometricEnabled(true);
     return user;
   }
 
@@ -484,7 +649,7 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
 
     // 1. Update Firebase display name if logged in
-    final fbUser = _firebaseAuth.currentUser;
+    final fbUser = _firebaseAuth?.currentUser;
     if (fbUser != null) {
       try {
         await fbUser.updateDisplayName(cleanName);
@@ -509,6 +674,8 @@ class AuthService {
 
     await _saveSession(prefs, updated);
     await _saveUserToRegistry(prefs, updated);
+    // مزامنة التعديلات مع Firestore
+    await _saveUserToFirestore(updated);
 
     return updated;
   }
@@ -538,7 +705,7 @@ class AuthService {
   /// Sign out from Firebase and clear active session (preserves last-known user profile)
   static Future<void> signOut() async {
     try {
-      await _firebaseAuth.signOut();
+      await _firebaseAuth?.signOut();
     } catch (_) {}
     _currentUser = null;
     _overrideAuthStatus = null;

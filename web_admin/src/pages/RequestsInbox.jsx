@@ -9,6 +9,7 @@ import confetti from 'canvas-confetti';
 import { doc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { db } from '../firebase';
 import { safeUpdateDoc } from '../utils/firestoreSafe';
+import { sendDirectFcmNotification } from '../utils/fcmSender';
 
 const PAGE_SIZE = 15;
 
@@ -226,6 +227,23 @@ export default function RequestsInbox({ requests = [] }) {
         }
       );
 
+      // 🔔 إرسال إشعار فوري مباشر لموضوع المستخدم user_{userId} لتنبيهه حتى والتطبيق مغلق
+      if (selectedReq.userId) {
+        let statusTitle = `تحديث طلب: ${selectedReq.subject || 'طلب مساعدة'}`;
+        let replyMsg = adminReply.trim() ? ` رد الهيئة: ${adminReply.trim()}` : '';
+        sendDirectFcmNotification({
+          topic: `user_${selectedReq.userId}`,
+          title: '🔔 الهيئة العامة للزكاة - تحديث الطلب',
+          body: `أصبحت حالة طلبكم: "${newStatus}".${replyMsg}`,
+          priority: 'urgent',
+          data: {
+            type: 'request',
+            id: selectedReq.id,
+            targetId: selectedReq.id,
+          },
+        }).catch(err => console.warn('Request FCM update notice:', err));
+      }
+
       if (newStatus === 'تمت الموافقة' || newStatus === 'جاهز للصرف') {
         confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
       }
@@ -233,7 +251,7 @@ export default function RequestsInbox({ requests = [] }) {
       if (res.isLocal) {
         showToast(`⚠️ تم تحديث الطلب (#${selectedReq.referenceCode || selectedReq.id}) محلياً بنجاح!`);
       } else {
-        showToast(`تم تحديث الطلب (#${selectedReq.referenceCode || selectedReq.id}) سحابياً بنجاح!`);
+        showToast(`🚀 تم تحديث الطلب (#${selectedReq.referenceCode || selectedReq.id}) وإرسال إشعار فوري للمواطن بنجاح!`);
       }
       setSelectedReq(null);
     } catch (e) {

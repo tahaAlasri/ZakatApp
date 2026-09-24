@@ -18,6 +18,7 @@ import '../../core/utils/app_input_formatters.dart';
 import '../../models/assistance_request.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/utils/auth_guard.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/services/cloud_sync_service.dart';
 import '../auth/login_screen.dart';
 import 'my_requests_screen.dart';
@@ -136,17 +137,52 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
   // FIX: async + await + error handling كامل
   Future<void> _submitOfficialRequest() async {
     FocusScope.of(context).unfocus();
-    final authProv = Provider.of<AuthProvider>(context, listen: false);
 
-    if (authProv.authStatus == AuthStatus.guest) {
+    final authProv = Provider.of<AuthProvider>(context, listen: false);
+    if (!authProv.canSubmitOfficialRequest) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          icon: const Icon(Icons.shield_outlined, color: AppColors.emeraldPrimary, size: 40),
+          icon: const Icon(Icons.lock_outline, color: AppColors.warning, size: 40),
           title: const Text('تسجيل الدخول مطلوب', style: TextStyle(fontWeight: FontWeight.bold)),
           content: const Text(
-            'يتطلب تقديم طلب رسمي تسجيل الدخول بحسابك لمتابعة حالة الطلب لدى الهيئة.\n\nيمكنك تسجيل الدخول الآن أو إنشاء مسودة وتصديرها بصيغة PDF.',
+            'يتطلب تقديم طلب رسمي تسجيل الدخول بحساب موثق لدى الهيئة.\n\nيمكنك في وضع الزائر إنشاء مسودة طلب وحفظها محلياً أو مشاركتها.',
+            style: TextStyle(fontSize: 13, height: 1.6),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.login_rounded, size: 18),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.emeraldPrimary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              label: const Text('تسجيل الدخول'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!AuthService.isFirebaseAuthenticated) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          icon: const Icon(Icons.cloud_off_outlined, color: AppColors.warning, size: 40),
+          title: const Text('تسجيل الدخول بالإنترنت مطلوب', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text(
+            'لتقديم طلب رسمي يصل إلى الهيئة العامة للزكاة، يجب تسجيل الدخول بحسابك عبر الإنترنت.\n\nإذا سجلت بالبصمة فقط أو بدون إنترنت، يرجى إعادة تسجيل الدخول بالبريد وكلمة المرور.',
             style: TextStyle(fontSize: 13, height: 1.6),
           ),
           actions: [
@@ -354,9 +390,11 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
+        padding: context.rPadding(horizontal: 16, vertical: 16),
+        child: ResponsiveConstraint(
+          maxWidth: 680,
+          child: Form(
+            key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -576,9 +614,11 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
                           children: [
                             Icon(Icons.markunread_mailbox_outlined, color: AppColors.emeraldPrimary),
                             SizedBox(width: 8),
-                            Text(
-                              'تجهيز خطاب للمشاركة',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.emeraldDark),
+                            Expanded(
+                              child: Text(
+                                'تجهيز خطاب للمشاركة',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.emeraldDark),
+                              ),
                             ),
                           ],
                         ),
@@ -637,6 +677,7 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

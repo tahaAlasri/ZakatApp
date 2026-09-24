@@ -112,12 +112,20 @@ class ZakatProvider extends ChangeNotifier {
 
   /// إعادة تحميل الأسعار من التخزين المحلي أو عند تحديث السحابة
   void reloadPricesFromPreferences() {
-    _gold24Price = PreferencesService.gold24Price;
-    _gold21Price = PreferencesService.gold21Price;
-    _gold18Price = PreferencesService.gold18Price;
-    _silverPrice = PreferencesService.silverPrice;
-    _currency = PreferencesService.currency;
     _marketCity = PreferencesService.marketCity;
+    if (_marketCity == 'aden' && PreferencesService.gold24Aden != null && PreferencesService.gold24Aden! > 0) {
+      _gold24Price = PreferencesService.gold24Aden!;
+      _gold21Price = _gold24Price * 21 / 24;
+      _gold18Price = _gold24Price * 18 / 24;
+      _silverPrice = PreferencesService.silverAden ?? PreferencesService.silverPrice;
+    } else {
+      _gold24Price = PreferencesService.gold24Price;
+      _gold21Price = PreferencesService.gold21Price;
+      _gold18Price = PreferencesService.gold18Price;
+      _silverPrice = PreferencesService.silverPrice;
+    }
+    _currency = PreferencesService.currency;
+    _lastPricesResult = null; // مسح الكاش القديم لتطبيق الأسعار المحدثة فوراً في كل الشاشات والحاسبات
     notifyListeners();
   }
 

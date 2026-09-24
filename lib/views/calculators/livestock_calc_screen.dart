@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/app_input_formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/category_icon_badge.dart';
 import '../../core/widgets/zakat_result_card.dart';
 import '../../models/favorite_item.dart';
@@ -161,9 +162,11 @@ class _LivestockCalcScreenState extends State<LivestockCalcScreen> with SingleTi
         children: [
           // Tab 1: Camels
           SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _camelsFormKey,
+            padding: context.rPadding(horizontal: 16, vertical: 16),
+            child: ResponsiveConstraint(
+              maxWidth: 680,
+              child: Form(
+                key: _camelsFormKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -231,12 +234,15 @@ class _LivestockCalcScreenState extends State<LivestockCalcScreen> with SingleTi
               ),
             ),
           ),
+        ),
 
           // Tab 2: Cows
           SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _cowsFormKey,
+            padding: context.rPadding(horizontal: 16, vertical: 16),
+            child: ResponsiveConstraint(
+              maxWidth: 680,
+              child: Form(
+                key: _cowsFormKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -304,12 +310,15 @@ class _LivestockCalcScreenState extends State<LivestockCalcScreen> with SingleTi
               ),
             ),
           ),
+        ),
 
           // Tab 3: Sheep
           SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _sheepFormKey,
+            padding: context.rPadding(horizontal: 16, vertical: 16),
+            child: ResponsiveConstraint(
+              maxWidth: 680,
+              child: Form(
+                key: _sheepFormKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -377,8 +386,9 @@ class _LivestockCalcScreenState extends State<LivestockCalcScreen> with SingleTi
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    ),
     );
   }
 }

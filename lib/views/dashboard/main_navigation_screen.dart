@@ -61,7 +61,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           NavigationDestination(
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment, color: AppColors.emeraldPrimary),
-            label: 'طلب مساعدة',
+            label: 'الطلبات',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

@@ -25,6 +25,7 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
   const [wheatBagPriceYER, setWheatBagPriceYER] = useState(initialWheatPrice);
   const [wheatBagWeightKg, setWheatBagWeightKg] = useState(50);
   const [customCashPerSa, setCustomCashPerSa] = useState('');
+  const [isManualSa, setIsManualSa] = useState(false);
   
   // Gold & Silver Prices State (Sana'a & Regional)
   const [gold24Sanaa, setGold24Sanaa] = useState(62850);
@@ -63,9 +64,20 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
     // 1. Load local fallback immediately
     const local = getLocalDoc('app_config', 'zakat_prices');
     if (local) {
-      if (local.wheatBagPriceYER) setWheatBagPriceYER(local.wheatBagPriceYER);
-      if (local.wheatBagWeightKg) setWheatBagWeightKg(local.wheatBagWeightKg);
-      if (local.fitrCashYER) setCustomCashPerSa(local.fitrCashYER.toString());
+      const bPrice = Number(local.wheatBagPriceYER) || initialWheatPrice;
+      const bWeight = Number(local.wheatBagWeightKg) || 50;
+      setWheatBagPriceYER(bPrice);
+      setWheatBagWeightKg(bWeight);
+
+      const autoSa = Math.round(bPrice / (bWeight / 2.5));
+      if (local.fitrCashYER && Number(local.fitrCashYER) !== autoSa) {
+        setCustomCashPerSa(local.fitrCashYER.toString());
+        setIsManualSa(true);
+      } else {
+        setCustomCashPerSa('');
+        setIsManualSa(false);
+      }
+
       if (local.gold24PriceYER) setGold24Sanaa(local.gold24PriceYER);
       if (local.gold21PriceYER) setGold21Sanaa(local.gold21PriceYER);
       if (local.gold18PriceYER) setGold18Sanaa(local.gold18PriceYER);
@@ -83,9 +95,20 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
       const snap = await withTimeout(getDoc(docRef), 3000);
       if (snap && snap.exists()) {
         const data = snap.data();
-        if (data.wheatBagPriceYER) setWheatBagPriceYER(data.wheatBagPriceYER);
-        if (data.wheatBagWeightKg) setWheatBagWeightKg(data.wheatBagWeightKg);
-        if (data.fitrCashYER) setCustomCashPerSa(data.fitrCashYER.toString());
+        const bPrice = data.wheatBagPriceYER ? Number(data.wheatBagPriceYER) : (local?.wheatBagPriceYER ? Number(local.wheatBagPriceYER) : initialWheatPrice);
+        const bWeight = data.wheatBagWeightKg ? Number(data.wheatBagWeightKg) : (local?.wheatBagWeightKg ? Number(local.wheatBagWeightKg) : 50);
+        setWheatBagPriceYER(bPrice);
+        setWheatBagWeightKg(bWeight);
+
+        const autoSa = Math.round(bPrice / (bWeight / 2.5));
+        if (data.fitrCashYER && Number(data.fitrCashYER) !== autoSa) {
+          setCustomCashPerSa(data.fitrCashYER.toString());
+          setIsManualSa(true);
+        } else {
+          setCustomCashPerSa('');
+          setIsManualSa(false);
+        }
+
         if (data.gold24PriceYER) setGold24Sanaa(data.gold24PriceYER);
         if (data.gold21PriceYER) setGold21Sanaa(data.gold21PriceYER);
         if (data.gold18PriceYER) setGold18Sanaa(data.gold18PriceYER);
@@ -211,7 +234,9 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
   const saWeightKg = 2.5; // الصاع النبوي بالكيلوغرام
   const saCountInBag = wheatBagWeightKg > 0 ? (wheatBagWeightKg / saWeightKg) : 20;
   const calculatedCashPerSa = saCountInBag > 0 ? Math.round(wheatBagPriceYER / saCountInBag) : 1200;
-  const effectiveCashPerSa = customCashPerSa ? Number(customCashPerSa) : calculatedCashPerSa;
+  const effectiveCashPerSa = (isManualSa && customCashPerSa !== '' && !isNaN(Number(customCashPerSa)) && Number(customCashPerSa) > 0)
+    ? Number(customCashPerSa)
+    : calculatedCashPerSa;
 
   // Active Nisab threshold calculations (current form values)
   const goldNisabSanaa = Math.round(gold24Sanaa * 85);
@@ -363,7 +388,12 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
                   min="1000"
                   step="500"
                   value={wheatBagPriceYER}
-                  onChange={e => setWheatBagPriceYER(Number(e.target.value))}
+                  onChange={e => {
+                    setWheatBagPriceYER(Number(e.target.value));
+                    if (!isManualSa) {
+                      setCustomCashPerSa('');
+                    }
+                  }}
                   className="form-control"
                   style={{ fontSize: '16px', fontWeight: '800', paddingLeft: '50px' }}
                 />
@@ -381,7 +411,12 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
               <label className="form-label">وزن كيس القمح المعتمد (كيلوجرام):</label>
               <select
                 value={wheatBagWeightKg}
-                onChange={e => setWheatBagWeightKg(Number(e.target.value))}
+                onChange={e => {
+                  setWheatBagWeightKg(Number(e.target.value));
+                  if (!isManualSa) {
+                    setCustomCashPerSa('');
+                  }
+                }}
                 className="form-control"
                 style={{ fontWeight: '700' }}
               >
@@ -393,13 +428,43 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
 
             {/* Cash Per Person / Sa' */}
             <div className="form-group">
-              <label className="form-label">القيمة النقدية المقدرة للصاع للفرد الواحد (ر.ي):</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label className="form-label" style={{ margin: 0 }}>القيمة النقدية المقدرة للصاع للفرد الواحد (ر.ي):</label>
+                {isManualSa ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsManualSa(false);
+                      setCustomCashPerSa('');
+                    }}
+                    className="btn btn-outline"
+                    style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--gold)', borderColor: 'rgba(212, 175, 55, 0.4)' }}
+                    title="العودة للحساب الآلي من سعر الكيس"
+                  >
+                    ↺ استعادة الحساب التلقائي
+                  </button>
+                ) : (
+                  <span style={{
+                    fontSize: '11px',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    color: '#10b981',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontWeight: 'bold',
+                    border: '1px solid rgba(16, 185, 129, 0.3)'
+                  }}>
+                    محسوب آلياً من الكيس
+                  </span>
+                )}
+              </div>
               <div style={{ position: 'relative' }}>
                 <input 
                   type="number"
-                  placeholder={`تلقائي: ${calculatedCashPerSa} ر.ي`}
-                  value={customCashPerSa}
-                  onChange={e => setCustomCashPerSa(e.target.value)}
+                  value={isManualSa ? customCashPerSa : calculatedCashPerSa}
+                  onChange={e => {
+                    setIsManualSa(true);
+                    setCustomCashPerSa(e.target.value);
+                  }}
                   className="form-control"
                   style={{ fontSize: '16px', fontWeight: '800', paddingLeft: '50px', color: 'var(--gold)' }}
                 />
@@ -408,7 +473,9 @@ export default function ZakatPrices({ initialWheatPrice = 24000, onPriceSaved })
                 </span>
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
-                المحسوب آلياً: ({wheatBagPriceYER.toLocaleString()} ÷ {saCountInBag.toFixed(0)} صاع = {calculatedCashPerSa} ر.ي). يمكنك تخصيصه.
+                {isManualSa 
+                  ? `تخصيص يدوي حالي. (المعادلة التلقائية: ${wheatBagPriceYER.toLocaleString()} ÷ ${saCountInBag.toFixed(0)} صاع = ${calculatedCashPerSa.toLocaleString()} ر.ي).`
+                  : `المحسوب آلياً: (${wheatBagPriceYER.toLocaleString()} ÷ ${saCountInBag.toFixed(0)} صاع = ${calculatedCashPerSa.toLocaleString()} ر.ي). يتغير تلقائياً مع سعر الكيس.`}
               </span>
             </div>
           </div>

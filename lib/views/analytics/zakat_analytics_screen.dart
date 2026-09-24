@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/pdf_service.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../models/zakat_record.dart';
 import '../../providers/zakat_provider.dart';
 import '../../providers/hawl_provider.dart';
@@ -67,7 +68,10 @@ class ZakatAnalyticsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('التحليلات والرسوم البيانية'),
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text('التحليلات والرسوم البيانية'),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.history_outlined),
@@ -86,10 +90,12 @@ class ZakatAnalyticsScreen extends StatelessWidget {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        padding: context.rPadding(horizontal: 16, vertical: 16),
+        child: ResponsiveConstraint(
+          maxWidth: 800,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             // KPI Summary Row
             Row(
               children: [
@@ -102,7 +108,7 @@ class ZakatAnalyticsScreen extends StatelessWidget {
                     isDark: isDark,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: _buildKpiCard(
                     title: 'العمليات المكتملة',
@@ -126,41 +132,44 @@ class ZakatAnalyticsScreen extends StatelessWidget {
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: AppColors.goldAccent.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.description_outlined, color: AppColors.goldDark, size: 24),
+                        child: const Icon(Icons.description_outlined, color: AppColors.goldDark, size: 22),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'كشف الحساب الزكوي السنوي المجمع',
+                              'كشف الحساب السنوي',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                             Text(
-                              'تصدير تقرير رسمي موثق بجميع العمليات بصيغة PDF',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              'تصدير تقرير موثق بجميع العمليات',
+                              style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         onPressed: () => _exportAnnualPdf(context, records, zakatProv.currency),
-                        icon: const Icon(Icons.picture_as_pdf, size: 16),
-                        label: const Text('تصدير PDF', style: TextStyle(fontSize: 12)),
+                        icon: const Icon(Icons.picture_as_pdf, size: 14),
+                        label: const Text('تصدير PDF', style: TextStyle(fontSize: 11)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.emeraldPrimary,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
@@ -182,9 +191,11 @@ class ZakatAnalyticsScreen extends StatelessWidget {
                       children: [
                         Icon(Icons.pie_chart, color: AppColors.emeraldPrimary, size: 20),
                         SizedBox(width: 8),
-                        Text(
-                          'توزيع مبالغ الزكاة حسب الأصناف',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        Expanded(
+                          child: Text(
+                            'توزيع مبالغ الزكاة حسب الأصناف',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
                         ),
                       ],
                     ),
@@ -212,9 +223,11 @@ class ZakatAnalyticsScreen extends StatelessWidget {
                         children: [
                           Icon(Icons.bar_chart, color: AppColors.goldDark, size: 20),
                           SizedBox(width: 8),
-                          Text(
-                            'مقارنة مبالغ الزكاة بين الفئات',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          Expanded(
+                            child: Text(
+                              'مقارنة مبالغ الزكاة بين الفئات',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
                           ),
                         ],
                       ),
@@ -241,9 +254,11 @@ class ZakatAnalyticsScreen extends StatelessWidget {
                       children: [
                         Icon(Icons.timelapse, color: AppColors.emeraldPrimary, size: 20),
                         SizedBox(width: 8),
-                        Text(
-                          'مسار الحول الهجري القمري (354 يوماً)',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        Expanded(
+                          child: Text(
+                            'مسار الحول الهجري القمري (354 يوماً)',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
                         ),
                       ],
                     ),
@@ -266,59 +281,79 @@ class ZakatAnalyticsScreen extends StatelessWidget {
                         ),
                       )
                     else
-                      Row(
-                        children: [
-                          HawlProgressGauge(
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isNarrow = constraints.maxWidth < 340;
+                          final gaugeWidget = HawlProgressGauge(
                             daysPassed: hawlProv.daysPassed,
                             daysRemaining: hawlProv.daysRemaining,
                             isCompleted: hawlProv.isHawlCompleted,
                             dueDate: hawlProv.expectedDueDate,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
+                          );
+
+                          final detailsWidget = Column(
+                            crossAxisAlignment: isNarrow ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                hawlProv.isHawlCompleted
+                                    ? 'اكتملت مدة الحول الشرعي!'
+                                    : 'الحول جارٍ بدقة',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                textAlign: isNarrow ? TextAlign.center : TextAlign.start,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'تاريخ بدء النصاب: ${AppFormatters.formatDate(hawlProv.startDate!)}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                textAlign: isNarrow ? TextAlign.center : TextAlign.start,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'تاريخ الاستحقاق: ${AppFormatters.formatDate(hawlProv.expectedDueDate!)}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                textAlign: isNarrow ? TextAlign.center : TextAlign.start,
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: hawlProv.isHawlCompleted
+                                      ? Colors.red.withValues(alpha: 0.1)
+                                      : AppColors.emeraldPrimary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
                                   hawlProv.isHawlCompleted
-                                      ? 'اكتملت مدة الحول الشرعي!'
-                                      : 'الحول جارٍ بدقة',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'تاريخ بدء النصاب: ${AppFormatters.formatDate(hawlProv.startDate!)}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'تاريخ الاستحقاق: ${AppFormatters.formatDate(hawlProv.expectedDueDate!)}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: hawlProv.isHawlCompleted
-                                        ? Colors.red.withValues(alpha: 0.1)
-                                        : AppColors.emeraldPrimary.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    hawlProv.isHawlCompleted
-                                        ? 'الزكاة واجبة الإخراج حالاً'
-                                        : 'متبقي ${hawlProv.daysRemaining} يوماً',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: hawlProv.isHawlCompleted ? Colors.red : AppColors.emeraldPrimary,
-                                    ),
+                                      ? 'الزكاة واجبة الإخراج حالاً'
+                                      : 'متبقي ${hawlProv.daysRemaining} يوماً',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: hawlProv.isHawlCompleted ? Colors.red : AppColors.emeraldPrimary,
                                   ),
                                 ),
+                              ),
+                            ],
+                          );
+
+                          if (isNarrow) {
+                            return Column(
+                              children: [
+                                gaugeWidget,
+                                const SizedBox(height: 14),
+                                detailsWidget,
                               ],
-                            ),
-                          ),
-                        ],
+                            );
+                          }
+
+                          return Row(
+                            children: [
+                              gaugeWidget,
+                              const SizedBox(width: 16),
+                              Expanded(child: detailsWidget),
+                            ],
+                          );
+                        },
                       ),
                   ],
                 ),
@@ -327,8 +362,9 @@ class ZakatAnalyticsScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildKpiCard({
     required String title,
@@ -346,25 +382,31 @@ class ZakatAnalyticsScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 20, color: color),
-                const SizedBox(width: 6),
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 5),
                 Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      title,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
               ),
             ),
           ],

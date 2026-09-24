@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/app_input_formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/category_icon_badge.dart';
 import '../../core/widgets/price_transparency_card.dart';
 import '../../core/widgets/zakat_result_card.dart';
@@ -143,9 +144,11 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
+        padding: context.rPadding(horizontal: 16, vertical: 16),
+        child: ResponsiveConstraint(
+          maxWidth: 680,
+          child: Form(
+            key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -188,28 +191,30 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
 
               // Official Nisab Info Card
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkCard : AppColors.goldLight.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.goldAccent.withValues(alpha: 0.35)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.verified, color: AppColors.goldDark, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          _useSilverNisab ? 'نصاب الفضة المعتمد (595 جم):' : 'نصاب الذهب المعتمد (85 جم):',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                      ],
+                    const Icon(Icons.verified, color: AppColors.goldDark, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _useSilverNisab ? 'نصاب الفضة المعتمد (595 جم):' : 'نصاب الذهب المعتمد (85 جم):',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    Text(
-                      '${nisabAmount.toStringAsFixed(0)} ${zakatProv.currency}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.goldDark),
+                    const SizedBox(width: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${nisabAmount.toStringAsFixed(0)} ${zakatProv.currency}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.goldDark),
+                      ),
                     ),
                   ],
                 ),
@@ -313,6 +318,7 @@ class _MoneyCalcScreenState extends State<MoneyCalcScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

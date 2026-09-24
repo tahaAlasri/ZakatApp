@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/app_input_formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/category_icon_badge.dart';
 import '../../core/widgets/zakat_result_card.dart';
 import '../../models/favorite_item.dart';
@@ -114,9 +115,11 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
+        padding: context.rPadding(horizontal: 16, vertical: 16),
+        child: ResponsiveConstraint(
+          maxWidth: 680,
+          child: Form(
+            key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -158,28 +161,30 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
 
               // Official Silver Price Card (From Control Panel)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkCard : Colors.blueGrey.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.3)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.verified, color: Colors.blueGrey, size: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          'سعر جرام الفضة المعتمد:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                      ],
+                    const Icon(Icons.verified, color: Colors.blueGrey, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'سعر جرام الفضة المعتمد:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    Text(
-                      '${zakatProv.silverPrice.toStringAsFixed(0)} ${zakatProv.currency}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blueGrey),
+                    const SizedBox(width: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${zakatProv.silverPrice.toStringAsFixed(0)} ${zakatProv.currency}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blueGrey),
+                      ),
                     ),
                   ],
                 ),
@@ -332,6 +337,7 @@ class _SilverCalcScreenState extends State<SilverCalcScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

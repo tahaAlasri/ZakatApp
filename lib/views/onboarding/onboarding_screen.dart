@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/preferences_service.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../dashboard/main_navigation_screen.dart';
 
 class OnboardingSlide {
@@ -66,8 +67,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: [
+        child: Center(
+          child: ResponsiveConstraint(
+            maxWidth: 540,
+            child: Column(
+              children: [
             // Top Bar with Skip button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -118,67 +122,77 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 },
                 itemBuilder: (context, index) {
                   final slide = _slides[index];
-                  return Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 200,
-                          height: 200,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppColors.emeraldPrimary.withValues(alpha: 0.25)
-                                : AppColors.emeraldSubtle,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.goldAccent.withValues(alpha: isDark ? 0.7 : 0.5),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: isDark
-                                    ? Colors.black.withValues(alpha: 0.3)
-                                    : AppColors.emeraldPrimary.withValues(alpha: 0.08),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
+                  final screenHeight = MediaQuery.sizeOf(context).height;
+                  final circleSize = (screenHeight * 0.22).clamp(110.0, 185.0);
+                  final isShort = screenHeight < 650;
+
+                  return Center(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: MediaQuery.sizeOf(context).width < 360 ? 18 : 28,
+                        vertical: isShort ? 8 : 16,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: circleSize,
+                            height: circleSize,
+                            padding: EdgeInsets.all(isShort ? 16 : 22),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.emeraldPrimary.withValues(alpha: 0.25)
+                                  : AppColors.emeraldSubtle,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.goldAccent.withValues(alpha: isDark ? 0.7 : 0.5),
+                                width: 2,
                               ),
-                            ],
-                          ),
-                          child: Image.asset(
-                            isDark
-                                ? slide.imagePath.replaceFirst('assets/images/', 'assets/images/dark/')
-                                : slide.imagePath,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) => Icon(
-                              slide.icon,
-                              size: 80,
-                              color: isDark ? AppColors.goldLight : AppColors.emeraldPrimary,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: isDark
+                                      ? Colors.black.withValues(alpha: 0.3)
+                                      : AppColors.emeraldPrimary.withValues(alpha: 0.08),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Image.asset(
+                              isDark
+                                  ? slide.imagePath.replaceFirst('assets/images/', 'assets/images/dark/')
+                                  : slide.imagePath,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) => Icon(
+                                slide.icon,
+                                size: circleSize * 0.45,
+                                color: isDark ? AppColors.goldLight : AppColors.emeraldPrimary,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 40),
-                        Text(
-                          slide.title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.emeraldDark,
+                          SizedBox(height: isShort ? 20 : 32),
+                          Text(
+                            slide.title,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: isShort ? 18 : 22,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.emeraldDark,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          slide.description,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.grey.shade700,
-                            height: 1.6,
+                          SizedBox(height: isShort ? 8 : 14),
+                          Text(
+                            slide.description,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: isShort ? 13 : 15,
+                              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                              height: 1.5,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -222,6 +236,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }

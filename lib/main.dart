@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'core/constants/app_themes.dart';
 import 'core/database/preferences_service.dart';
@@ -12,6 +13,8 @@ import 'core/services/auth_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/permission_service.dart';
 import 'core/services/cloud_sync_service.dart';
+import 'core/services/app_lock_manager.dart';
+import 'views/auth/app_lock_screen.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/zakat_provider.dart';
@@ -32,6 +35,7 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
@@ -48,6 +52,9 @@ void main() async {
   }
   final cloudSync = CloudSyncService();
   await cloudSync.init();
+
+  final appLockManager = AppLockManager();
+  appLockManager.init();
 
   final zakatProvider = ZakatProvider();
 
@@ -67,6 +74,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => HawlProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider.value(value: cloudSync),
+        ChangeNotifierProvider.value(value: appLockManager),
       ],
       child: const ZakatApp(),
     ),
@@ -98,13 +106,25 @@ class ZakatApp extends StatelessWidget {
       ],
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
+        final lockManager = Provider.of<AppLockManager>(context);
+        final authProvider = Provider.of<AuthProvider>(context);
+        final bool shouldShowLock = lockManager.isLocked && authProvider.isAuthenticated;
+
         return MediaQuery(
           data: mediaQuery.copyWith(
             textScaler: mediaQuery.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.15),
           ),
           child: Directionality(
             textDirection: TextDirection.rtl,
-            child: child ?? const SizedBox.shrink(),
+            child: Stack(
+              children: [
+                child ?? const SizedBox.shrink(),
+                if (shouldShowLock)
+                  const Positioned.fill(
+                    child: AppLockScreen(),
+                  ),
+              ],
+            ),
           ),
         );
       },

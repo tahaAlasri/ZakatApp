@@ -73,12 +73,15 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> loginWithBiometrics({String? hintEmail}) async {
+  Future<bool> loginWithBiometrics({String? hintEmail, String? password}) async {
     _setLoading(true);
     _errorMessage = null;
 
     try {
-      final user = await AuthService.signInWithBiometrics(hintEmail: hintEmail);
+      final user = await AuthService.signInWithBiometrics(
+        hintEmail: hintEmail,
+        password: password,
+      );
       if (user != null) {
         _user = user;
         _setLoading(false);

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/cloud_sync_service.dart';
 import '../../core/services/pdf_service.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../models/assistance_request.dart';
 import 'assistance_request_screen.dart';
 
@@ -97,58 +98,60 @@ class MyRequestsScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: requests.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: AppColors.emeraldPrimary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
+      body: ResponsiveConstraint(
+        maxWidth: 720,
+        child: requests.isEmpty
+            ? Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.emeraldPrimary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.assignment_outlined,
+                          size: 56,
+                          color: AppColors.emeraldPrimary,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.assignment_outlined,
-                        size: 64,
-                        color: AppColors.emeraldPrimary,
+                      const SizedBox(height: 16),
+                      const Text(
+                        'لا توجد طلبات مساعدة مسجلة',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'لا توجد طلبات مساعدة مسجلة',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'عند تقديم طلب مساعدة رسمي للهيئة العامة للزكاة، ستتمكن من متابعة حالته وردود الإدارة لحظة بلحظة من هذه الشاشة.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AssistanceRequestScreen()),
-                        );
-                      },
-                      icon: const Icon(Icons.post_add),
-                      label: const Text('تقديم طلب مساعدة الآن'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.emeraldPrimary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'عند تقديم طلب مساعدة رسمي للهيئة العامة للزكاة، ستتمكن من متابعة حالته وردود الإدارة لحظة بلحظة من هذه الشاشة.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const AssistanceRequestScreen()),
+                          );
+                        },
+                        icon: const Icon(Icons.post_add),
+                        label: const Text('تقديم طلب مساعدة الآن'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.emeraldPrimary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              )
+            : ListView.builder(
+              padding: context.rPadding(horizontal: 16, vertical: 16),
               itemCount: requests.length,
               itemBuilder: (context, index) {
                 final req = requests[index];
@@ -377,6 +380,7 @@ class MyRequestsScreen extends StatelessWidget {
                 );
               },
             ),
+      ),
     );
   }
 
@@ -415,14 +419,17 @@ class MyRequestsScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-            color: isPassed
-                ? (isDark ? Colors.white70 : Colors.black87)
-                : (isDark ? Colors.grey.shade500 : Colors.grey),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+              color: isPassed
+                  ? (isDark ? Colors.white70 : Colors.black87)
+                  : (isDark ? Colors.grey.shade500 : Colors.grey),
+            ),
           ),
         ),
       ],

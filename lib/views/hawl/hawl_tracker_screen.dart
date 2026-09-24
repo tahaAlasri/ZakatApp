@@ -6,6 +6,7 @@ import '../../core/services/pdf_service.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/hijri_date_picker.dart';
 import '../../core/utils/auth_guard.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../models/hawl_item.dart';
 import '../../providers/hawl_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -83,7 +84,8 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               contentPadding: EdgeInsets.zero,
               content: Container(
-                width: 420,
+                constraints: const BoxConstraints(maxWidth: 420),
+                width: double.maxFinite,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
                   color: isDark ? AppColors.darkSurface : Colors.white,
@@ -395,9 +397,11 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
           final items = hawl.items;
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            padding: context.rPadding(horizontal: 16, vertical: 16),
+            child: ResponsiveConstraint(
+              maxWidth: 760,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!authProv.isAuthenticated)
                   Container(
@@ -465,30 +469,37 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.access_time_filled, color: AppColors.goldAccent, size: 22),
-                              SizedBox(width: 8),
-                              Text(
-                                'متابعة الأحوال المتعددة',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                          const Expanded(
+                            child: Row(
+                              children: [
+                                Icon(Icons.access_time_filled, color: AppColors.goldAccent, size: 22),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'متابعة الأحوال المتعددة',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           ElevatedButton.icon(
                             onPressed: () => _openAddEditHawlDialog(context),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.goldAccent,
                               foregroundColor: AppColors.emeraldDark,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('إضافة حول', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('إضافة حول', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                         ],
                       ),
@@ -570,9 +581,13 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'الأوعية والأموال المسجلة (${items.length})',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      Expanded(
+                        child: Text(
+                          'الأوعية والأموال المسجلة (${items.length})',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       if (items.length > 1)
                         TextButton.icon(
@@ -652,8 +667,9 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
                 ),
               ],
             ),
-          );
-        },
+          ),
+        );
+      },
       ),
     );
   }
@@ -855,11 +871,15 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
             const SizedBox(height: 10),
 
             // Actions Toolbar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 2,
               children: [
                 // Notify / Send Reminder
                 IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(6),
                   onPressed: () async {
                     await PermissionService.requestNotificationPermission();
                     if (!context.mounted) return;
@@ -886,12 +906,16 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
                 ),
                 // Share
                 IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(6),
                   onPressed: () => _shareHawlItem(item),
                   tooltip: 'مشاركة بطاقة الحول',
                   icon: const Icon(Icons.share_outlined, size: 20, color: AppColors.emeraldPrimary),
                 ),
                 // Renew / Reset this specific Hawl
                 IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(6),
                   onPressed: () async {
                     final picked = await showHijriDatePicker(
                       context: context,
@@ -915,12 +939,16 @@ class _HawlTrackerScreenState extends State<HawlTrackerScreen> {
                 ),
                 // Edit
                 IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(6),
                   onPressed: () => _openAddEditHawlDialog(context, item),
                   tooltip: 'تعديل البيانات',
                   icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
                 ),
                 // Delete
                 IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(6),
                   onPressed: () async {
                     final confirm = await showDialog<bool>(
                       context: context,

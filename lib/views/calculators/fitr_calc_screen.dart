@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/app_input_formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/category_icon_badge.dart';
 import '../../core/widgets/zakat_result_card.dart';
 import '../../models/favorite_item.dart';
@@ -127,9 +128,10 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
     final isFav = favProv.isFavorite(favId);
 
     final members = AppInputFormatters.tryParseInt(_membersController.text) ?? 1;
+    final saCount = cloudSync.wheatBagWeightKg > 0 ? (cloudSync.wheatBagWeightKg / 2.5) : 20.0;
     final officialPerPersonCash = cloudSync.fitrCashYER > 0
         ? cloudSync.fitrCashYER
-        : (cloudSync.wheatBagPriceYER / 20.0);
+        : (saCount > 0 ? (cloudSync.wheatBagPriceYER / saCount) : 1200.0);
     final totalCashEstimate = (members * officialPerPersonCash).round();
 
     return Scaffold(
@@ -170,9 +172,11 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
+        padding: context.rPadding(horizontal: 16, vertical: 16),
+        child: ResponsiveConstraint(
+          maxWidth: 680,
+          child: Form(
+            key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -339,15 +343,21 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
                                       color: _isCashPayment ? AppColors.emeraldPrimary : Colors.grey,
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      'نقداً (بالمال)',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _isCashPayment ? AppColors.emeraldPrimary : null,
-                                        fontSize: 13,
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'نقداً (بالمال)',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: _isCashPayment ? AppColors.emeraldPrimary : null,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                     ),
-                                    const Text('قيمة الصاع مالاً', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                    const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text('قيمة الصاع مالاً', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -380,15 +390,21 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
                                       color: !_isCashPayment ? AppColors.goldDark : Colors.grey,
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      'عيناً (طعام وقوت)',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: !_isCashPayment ? AppColors.goldDark : null,
-                                        fontSize: 13,
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'عيناً (طعام وقوت)',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: !_isCashPayment ? AppColors.goldDark : null,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                     ),
-                                    const Text('صاع حبوب/أرز', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                    const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text('صاع حبوب/أرز', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -413,21 +429,26 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.verified, color: AppColors.emeraldPrimary, size: 20),
-                                  const SizedBox(width: 8),
+                                  const Icon(Icons.verified, color: AppColors.emeraldPrimary, size: 18),
+                                  const SizedBox(width: 6),
                                   const Expanded(
                                     child: Text(
-                                      'التسعيرة الرسمية المعتمدة لزكاة الفطرة',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      'التسعيرة الرسمية المعتمدة',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
+                                  const SizedBox(width: 6),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: AppColors.emeraldPrimary.withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: const Text('الهيئة العامة للزكاة', style: TextStyle(fontSize: 10, color: AppColors.emeraldPrimary, fontWeight: FontWeight.bold)),
+                                    child: const Text(
+                                      'هيئة الزكاة',
+                                      style: TextStyle(fontSize: 10, color: AppColors.emeraldPrimary, fontWeight: FontWeight.bold),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -435,10 +456,17 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text('قيمة زكاة الفطرة للفرد (صاع نبوي):', style: TextStyle(fontSize: 12.5)),
+                                  const Expanded(
+                                    child: Text(
+                                      'قيمة زكاة الفطرة للفرد:',
+                                      style: TextStyle(fontSize: 12.5),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
                                   Text(
                                     '${officialPerPersonCash.toStringAsFixed(0)} ${zakatProv.currency}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.emeraldPrimary),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: AppColors.emeraldPrimary),
                                   ),
                                 ],
                               ),
@@ -446,7 +474,14 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text('التسعيرة المعتمدة لكيس القمح 50 كجم:', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                                  const Expanded(
+                                    child: Text(
+                                      'سعر كيس القمح 50 كجم:',
+                                      style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
                                   Text(
                                     '${cloudSync.wheatBagPriceYER.toStringAsFixed(0)} ${zakatProv.currency}',
                                     style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.grey),
@@ -457,10 +492,17 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('إجمالي الواجب نقداً عن $members أفراد:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  Expanded(
+                                    child: Text(
+                                      'إجمالي الواجب ($members أفراد):',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
                                   Text(
                                     '$totalCashEstimate ${zakatProv.currency}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.emeraldDark, fontSize: 16),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.emeraldDark, fontSize: 15),
                                   ),
                                 ],
                               ),
@@ -511,31 +553,67 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
                           child: Column(
                             children: [
                               const Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('الواجب عن كل فرد:', style: TextStyle(fontSize: 12)),
-                                  Text('صاع نبوي (≈ 2.5 كجم)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                ],
-                              ),
-                              const Divider(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('إجمالي الواجب عن $members أفراد:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  Text(
-                                    '${(members * 2.5).toStringAsFixed(1)} كجم ($members أصواع)',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.goldDark, fontSize: 14),
+                                  Expanded(
+                                    child: Text(
+                                      'الواجب عن كل فرد:',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  SizedBox(width: 6),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text('صاع نبوي (≈ 2.5 كجم)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    ),
                                   ),
                                 ],
                               ),
                               const Divider(height: 12),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text('ما يعادل من أكياس القمح 50 كجم:', style: TextStyle(fontSize: 12)),
-                                  Text(
-                                    '${((members * 2.5) / 50.0).toStringAsFixed(2)} كيس',
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'إجمالي الواجب عن $members أفراد:',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        '${(members * 2.5).toStringAsFixed(1)} كجم ($members أصواع)',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.goldDark, fontSize: 14),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 12),
+                              Row(
+                                children: [
+                                  const Expanded(
+                                    child: Text(
+                                      'ما يعادل من أكياس القمح 50 كجم:',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        '${((members * 2.5) / 50.0).toStringAsFixed(2)} كيس',
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -570,6 +648,7 @@ class _FitrCalcScreenState extends State<FitrCalcScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

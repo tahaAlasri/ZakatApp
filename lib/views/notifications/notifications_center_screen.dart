@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/services/cloud_sync_service.dart';
 import '../requests/my_requests_screen.dart';
 import '../calculators/fitr_calc_screen.dart';
@@ -65,62 +66,68 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Filter Chips
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: Theme.of(context).cardColor,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip('all', 'الكل (${allNotifications.length})'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('request', 'طلبات المساعدة'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('announcement', 'الإعلانات والتعميمات'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('price', 'تسعيرة الزكاة'),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-
-          // Notification List
-          Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.notifications_none_rounded, size: 64, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'لا توجد إشعارات حالياً',
-                          style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'ستصلك إشعارات فورية عند تحديث حالة طلبك أو صدور تعميمات جديدة',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final notif = filtered[index];
-                      return _buildNotificationCard(context, notif, cloudSync);
-                    },
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ResponsiveConstraint(
+          maxWidth: 720,
+          child: Column(
+            children: [
+              // Filter Chips
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                color: Theme.of(context).cardColor,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip('all', 'الكل (${allNotifications.length})'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('request', 'طلبات المساعدة'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('announcement', 'الإعلانات والتعميمات'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('price', 'تسعيرة الزكاة'),
+                    ],
                   ),
+                ),
+              ),
+              const Divider(height: 1),
+
+              // Notification List
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.notifications_none_rounded, size: 64, color: Colors.grey.shade400),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'لا توجد إشعارات حالياً',
+                              style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'ستصلك إشعارات فورية عند تحديث حالة طلبك أو صدور تعميمات جديدة',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: context.rPadding(horizontal: 16, vertical: 12),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final notif = filtered[index];
+                          return _buildNotificationCard(context, notif, cloudSync);
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -221,17 +228,22 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: iconColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            typeLabel,
-                            style: TextStyle(fontSize: 10, color: iconColor, fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: iconColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              typeLabel,
+                              style: TextStyle(fontSize: 10, color: iconColor, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           DateFormat('hh:mm a - MM/dd', 'ar').format(notif.timestamp),
                           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),

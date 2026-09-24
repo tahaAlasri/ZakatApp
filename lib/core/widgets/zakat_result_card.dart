@@ -5,6 +5,7 @@ import '../services/pdf_service.dart';
 import '../services/auth_service.dart';
 import '../utils/formatters.dart';
 import '../utils/auth_guard.dart';
+import '../utils/responsive_helper.dart';
 import '../../models/zakat_record.dart';
 import '../../providers/zakat_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -168,7 +169,7 @@ class ZakatResultCard extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: context.rPadding(horizontal: 16, vertical: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -180,12 +181,15 @@ class ZakatResultCard extends StatelessWidget {
                   color: statusIconColor,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isReached ? 'اكتمل النصاب الشرعي' : 'لم يكتمل النصاب',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: statusTextColor,
+                Expanded(
+                  child: Text(
+                    isReached ? 'اكتمل النصاب الشرعي' : 'لم يكتمل النصاب',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: statusTextColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -215,21 +219,29 @@ class ZakatResultCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               if (inKind.isNotEmpty)
-                Text(
-                  inKind,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: dueAmountColor,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    inKind,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: dueAmountColor,
+                    ),
                   ),
                 )
               else
-                Text(
-                  AppFormatters.formatCurrency(result.zakatAmount, currency: currency),
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: dueAmountColor,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    AppFormatters.formatCurrency(result.zakatAmount, currency: currency),
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: dueAmountColor,
+                    ),
                   ),
                 ),
             ],
@@ -243,19 +255,25 @@ class ZakatResultCard extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () => _handleSave(context),
                     icon: const Icon(Icons.save_outlined, size: 18),
-                    label: const Text('حفظ بالسجل', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('حفظ بالسجل', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isDark ? AppColors.emeraldPrimary : AppColors.emeraldPrimary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 IconButton.filledTonal(
                   onPressed: () => _handleExportPdf(context),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(8),
                   icon: Icon(
                     Icons.picture_as_pdf_outlined,
+                    size: 20,
                     color: isDark ? AppColors.goldAccent : AppColors.emeraldPrimary,
                   ),
                   tooltip: 'تصدير وحفظ PDF',
@@ -263,8 +281,11 @@ class ZakatResultCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 IconButton.filledTonal(
                   onPressed: _handleShare,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(8),
                   icon: Icon(
                     Icons.share_outlined,
+                    size: 20,
                     color: isDark ? AppColors.goldAccent : AppColors.emeraldPrimary,
                   ),
                   tooltip: 'مشاركة النتيجة',
@@ -286,14 +307,17 @@ class ZakatResultCard extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.payments_outlined, color: AppColors.emeraldPrimary, size: 18),
-                label: const Text(
-                  'سداد وإخراج الزكاة (الحسابات المعتمدة)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.emeraldPrimary),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'سداد وإخراج الزكاة (الحسابات المعتمدة)',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.emeraldPrimary),
+                  ),
                 ),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.emeraldPrimary, width: 1.5),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                 ),
               ),
             ],

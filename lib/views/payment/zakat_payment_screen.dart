@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/services/cloud_sync_service.dart';
 import 'package:provider/provider.dart';
 
@@ -179,10 +180,12 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
         title: const Text('قنوات سداد وتوجيه الزكاة'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        padding: context.rPadding(horizontal: 16, vertical: 16),
+        child: ResponsiveConstraint(
+          maxWidth: 720,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             // Header Card
             Container(
               padding: const EdgeInsets.all(20),
@@ -296,9 +299,11 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
                       children: [
                         Icon(Icons.alt_route, color: AppColors.emeraldPrimary, size: 20),
                         SizedBox(width: 8),
-                        Text(
-                          'توجيه الزكاة إلى مصرف معين:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        Expanded(
+                          child: Text(
+                            'توجيه الزكاة إلى مصرف معين:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
                         ),
                       ],
                     ),
@@ -325,9 +330,13 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'اختر البنك أو المحفظة الإلكترونية للسداد:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                const Expanded(
+                  child: Text(
+                    'اختر البنك أو المحفظة الإلكترونية للسداد:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 if (cloudSync.bankAccounts.isNotEmpty)
                   Container(
@@ -407,34 +416,43 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
                           border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('رقم الحساب الموحد:', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                const SizedBox(height: 2),
-                                SelectableText(
-                                  ch.accountNumber,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 17,
-                                    color: ch.brandColor,
-                                    letterSpacing: 1.2,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('رقم الحساب الموحد:', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                  const SizedBox(height: 2),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: SelectableText(
+                                      ch.accountNumber,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 17,
+                                        color: ch.brandColor,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             ElevatedButton.icon(
                               onPressed: () => _copyAccountNumber(ch.accountNumber, ch.name),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.emeraldPrimary,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                               icon: const Icon(Icons.copy, size: 14),
-                              label: const Text('نسخ الرقم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              label: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('نسخ الرقم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              ),
                             ),
                           ],
                         ),
@@ -470,9 +488,11 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
                       children: [
                         Icon(Icons.menu_book, color: AppColors.emeraldPrimary, size: 22),
                         SizedBox(width: 8),
-                        Text(
-                          'مصارف الزكاة الشرعية الثمانية',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        Expanded(
+                          child: Text(
+                            'مصارف الزكاة الشرعية الثمانية',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
                         ),
                       ],
                     ),
@@ -494,6 +514,7 @@ class _ZakatPaymentScreenState extends State<ZakatPaymentScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

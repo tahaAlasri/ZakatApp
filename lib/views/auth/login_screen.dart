@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/preferences_service.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/zakat_provider.dart';
 import 'register_screen.dart';
@@ -81,8 +82,11 @@ class _LoginScreenState extends State<LoginScreen> {
   void _onBiometricLogin() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final emailText = _emailController.text.trim();
+    final passwordText = _passwordController.text;
+
     final success = await auth.loginWithBiometrics(
       hintEmail: emailText.isNotEmpty ? emailText : null,
+      password: passwordText.isNotEmpty ? passwordText : null,
     );
 
     if (!mounted) return;
@@ -98,11 +102,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _navigateAfterAuth();
     } else {
       final msg = auth.errorMessage ?? 'تعذرت المصادقة بالبصمة';
-      final isNoAccount = msg.contains('لا يوجد حساب مسجل') || msg.contains('تسجيل الدخول بالبريد أولاً');
+      final isCloudVerified = msg.contains('تم التحقق: حسابك مسجل');
+      final isNoAccount = msg.contains('لا يوجد حساب مسجل بهذا البريد');
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
-          backgroundColor: isNoAccount ? AppColors.emeraldPrimary : AppColors.warning,
+          backgroundColor: isCloudVerified ? AppColors.emeraldPrimary : AppColors.warning,
           action: isNoAccount
               ? SnackBarAction(
                   label: 'إنشاء حساب',
@@ -114,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 )
               : null,
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -162,55 +168,57 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Logo & Heading
-                  Center(
-                    child: Container(
-                      width: 90,
-                      height: 90,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.darkCard : AppColors.emeraldSubtle,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.goldAccent, width: 2),
-                      ),
-                      child: Image.asset(
-                        'assets/images/MainIcon.png',
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.account_balance_wallet,
-                          size: 45,
-                          color: AppColors.emeraldPrimary,
+            padding: context.rPadding(horizontal: 24, vertical: 16),
+            child: ResponsiveConstraint(
+              maxWidth: 480,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Logo & Heading
+                    Center(
+                      child: Container(
+                        width: context.rWidth(85),
+                        height: context.rWidth(85),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.darkCard : AppColors.emeraldSubtle,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.goldAccent, width: 2),
+                        ),
+                        child: Image.asset(
+                          'assets/images/MainIcon.png',
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            Icons.account_balance_wallet,
+                            size: context.rIconSize(42),
+                            color: AppColors.emeraldPrimary,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'تسجيل الدخول',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.emeraldPrimary,
+                    SizedBox(height: context.rSpacing(18)),
+                    Text(
+                      'تسجيل الدخول',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: context.rFont(24),
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.emeraldPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'أهلاً بك مجدداً في تطبيق الهيئة العامة للزكاة',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    const SizedBox(height: 6),
+                    Text(
+                      'أهلاً بك مجدداً في تطبيق الهيئة العامة للزكاة',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: context.rFont(13.5),
+                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
+                    SizedBox(height: context.rSpacing(28)),
 
                   // Email Field
                   TextFormField(
@@ -323,8 +331,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 24),
 
                   // Register link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       const Text('ليس لديك حساب؟'),
                       TextButton(
@@ -356,6 +365,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

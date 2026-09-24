@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
   Megaphone, Plus, Trash2, Send, CheckCircle2,
-  Smartphone, ToggleLeft, ToggleRight
+  Smartphone, ToggleLeft, ToggleRight, Key, Info, Settings
 } from 'lucide-react';
 import {
   collection, addDoc, deleteDoc, doc, updateDoc, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { safeAddDoc, safeUpdateDoc, safeDeleteDoc, getLocalCollection } from '../utils/firestoreSafe';
+import { sendDirectFcmNotification, getStoredServerKey, setStoredServerKey } from '../utils/fcmSender';
 
 // ✅ Helper: format a Date object safely
 function formatDate(val) {
@@ -37,6 +38,9 @@ export default function Announcements({ announcements = [] }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState(null);
   const [localExtraList, setLocalExtraList] = useState(() => getLocalCollection('announcements'));
+  const [showFcmModal, setShowFcmModal] = useState(false);
+  const [fcmKeyInput, setFcmKeyInput] = useState(() => getStoredServerKey());
+  const [savedKeyToast, setSavedKeyToast] = useState(false);
 
   const showToast = (msg) => {
     setSuccessToast(msg);
@@ -53,6 +57,17 @@ export default function Announcements({ announcements = [] }) {
     }
     return list;
   })();
+
+  const handleSaveFcmKey = (e) => {
+    e.preventDefault();
+    setStoredServerKey(fcmKeyInput);
+    setSavedKeyToast(true);
+    setTimeout(() => {
+      setSavedKeyToast(false);
+      setShowFcmModal(false);
+    }, 1500);
+    showToast('تم حفظ مفتاح خادم الإشعارات FCM بنجاح في لوحة التحكم.');
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -77,6 +92,22 @@ export default function Announcements({ announcements = [] }) {
         payload
       );
 
+      // 🔔 إرسال إشعار فوري مباشر لجميع الهواتف المشتركة في موضوع announcements
+      sendDirectFcmNotification({
+        topic: 'announcements',
+        title: payload.title,
+        body: payload.content,
+        priority: payload.priority,
+        data: {
+          id: res.id,
+          type: 'announcement',
+        },
+      }).then(fcmRes => {
+        if (fcmRes.success) {
+          console.log('✅ FCM Push Sent successfully from Admin panel.');
+        }
+      }).catch(err => console.warn('Direct FCM notice:', err));
+
       // Add to local state immediately so user sees it right away
       setLocalExtraList(prev => [{ id: res.id, ...payload }, ...prev]);
 
@@ -87,7 +118,7 @@ export default function Announcements({ announcements = [] }) {
       if (res.isLocal) {
         showToast('⚠️ تم نشر الإعلان محلياً في اللوحة بنجاح (السحاب غير مفعل في Firebase حالياً)!');
       } else {
-        showToast('تم نشر الإعلان بنجاح وسيظهر في هواتف جميع المواطنين فوراً!');
+        showToast('🚀 تم نشر الإعلان بنجاح وسيصل كإشعار فوري لجميع الهواتف حتى لو كان التطبيق مغلقاً!');
       }
     } catch (err) {
       alert('حدث خطأ أثناء نشر الإعلان: ' + err.message);
@@ -149,11 +180,80 @@ export default function Announcements({ announcements = [] }) {
         </div>
       )}
 
-      <div>
-        <h1 style={{ fontSize: '22px', fontWeight: '800', margin: 0 }}>نظام الإعلانات والتعميمات الرسمية</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
-          نشر تنبيهات فورية ومواعيد صرف الزكاة وإعلانات اللجان الميدانية لتظهر في أعلى شاشة التطبيق.
-        </p>
+      {/* FCM Server Key Settings Modal */}
+      {showFcmModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '20px'
+        }}>
+          <div className="zakat-card" style={{ maxWidth: '540px', width: '100%', background: '#0f172a', border: '1px solid var(--gold)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Key size={20} color="var(--gold)" />
+                <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0 }}>إعدادات إرسال الإشعارات المباشرة (FCM)</h3>
+              </div>
+              <button onClick={() => setShowFcmModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '16px' }}>
+              يمكنك إدخال مفتاح خادم Firebase (Server Key) هنا ليتم إرسال إشعارات الـ Push Notification مباشرة من المتصفح لجميع الهواتف حتى لو كان التطبيق مغلقاً كلياً:
+            </p>
+
+            <form onSubmit={handleSaveFcmKey}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontSize: '12.5px' }}>FCM Server Key (مفتاح الخادم):</label>
+                <input
+                  type="password"
+                  value={fcmKeyInput}
+                  onChange={(e) => setFcmKeyInput(e.target.value)}
+                  placeholder="AAAA... (من Firebase Console > Project Settings > Cloud Messaging)"
+                  className="form-control"
+                  style={{ direction: 'ltr', fontFamily: 'monospace', fontSize: '12px' }}
+                />
+              </div>
+
+              <div style={{ background: 'rgba(0, 105, 92, 0.15)', border: '1px solid rgba(0, 105, 92, 0.4)', borderRadius: '8px', padding: '12px', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--gold)', fontWeight: 'bold', fontSize: '12px', marginBottom: '4px' }}>
+                  <Info size={16} />
+                  <span>طريقة الحصول على المفتاح:</span>
+                </div>
+                <ol style={{ margin: 0, paddingRight: '20px', fontSize: '11.5px', color: '#cbd5e1', lineHeight: '1.6' }}>
+                  <li>ادخل إلى <strong>Firebase Console</strong> ثم اضغط على ⚙️ (إعدادات المشروع).</li>
+                  <li>اذهب إلى تبويب <strong>Cloud Messaging</strong>.</li>
+                  <li>انسخ قيمة <strong>Server key</strong> وضعها هنا واضغط حفظ.</li>
+                </ol>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowFcmModal(false)} className="btn btn-secondary btn-sm">إلغاء</button>
+                <button type="submit" className="btn btn-gold btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={16} />
+                  <span>{savedKeyToast ? 'تم الحفظ!' : 'حفظ المفتاح'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: '800', margin: 0 }}>نظام الإعلانات والتعميمات الرسمية</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+            نشر تنبيهات فورية ومواعيد صرف الزكاة لتصل لجميع هواتف المواطنين كإشعارات دفع حتى والتطبيق مغلق.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowFcmModal(true)}
+          className="btn btn-secondary btn-sm"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', border: '1px solid var(--gold)', color: 'var(--gold)' }}
+        >
+          <Key size={16} />
+          <span>إعدادات مفتاح الإشعارات (FCM)</span>
+        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '24px' }}>

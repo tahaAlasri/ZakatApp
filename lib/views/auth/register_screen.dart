@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/app_input_formatters.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/zakat_provider.dart';
 import '../dashboard/main_navigation_screen.dart';
@@ -176,27 +177,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 10),
-                const Text(
-                  'انضم إلى تطبيق الهيئة العامة للزكاة',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.emeraldPrimary,
+          padding: context.rPadding(horizontal: 24, vertical: 16),
+          child: ResponsiveConstraint(
+            maxWidth: 500,
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 10),
+                  Text(
+                    'انضم إلى تطبيق الهيئة العامة للزكاة',
+                    style: TextStyle(
+                      fontSize: context.rFont(22),
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.emeraldPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'أنشئ حسابك لتتبع نصابك وسجلاتك وحساباتك السنوية بكل أمان',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                ),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 4),
+                  Text(
+                    'أنشئ حسابك لتتبع نصابك وسجلاتك وحساباتك السنوية بكل أمان',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: context.rFont(13)),
+                  ),
+                  SizedBox(height: context.rSpacing(18)),
 
                 // Avatar Picker
                 Center(
@@ -417,6 +420,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

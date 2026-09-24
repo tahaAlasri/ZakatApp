@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/zakat_categories.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/category_icon_badge.dart';
 
 class CalculatorsGridScreen extends StatefulWidget {
@@ -49,8 +50,10 @@ class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
         title: const Text('حاسبات الزكاة الشاملة'),
         centerTitle: true,
       ),
-      body: Column(
-        children: [
+      body: ResponsiveConstraint(
+        maxWidth: 950,
+        child: Column(
+          children: [
           // Search & Filter Header
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -131,15 +134,25 @@ class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      final crossAxisCount = constraints.maxWidth > 650 ? 3 : 2;
-                      final aspectRatio = constraints.maxWidth > 650 ? 1.15 : 0.98;
+                      final isCompact = constraints.maxWidth < 360;
+                      final crossAxisCount = constraints.maxWidth > 850
+                          ? 4
+                          : (constraints.maxWidth > 550 ? 3 : 2);
+                      final aspectRatio = constraints.maxWidth > 850
+                          ? 1.25
+                          : (constraints.maxWidth > 550 ? 1.15 : (isCompact ? 0.88 : 0.98));
 
                       return GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        padding: EdgeInsets.fromLTRB(
+                          isCompact ? 10 : 16,
+                          8,
+                          isCompact ? 10 : 16,
+                          24,
+                        ),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
+                          crossAxisSpacing: isCompact ? 8 : 12,
+                          mainAxisSpacing: isCompact ? 8 : 12,
                           childAspectRatio: aspectRatio,
                         ),
                         itemCount: filteredItems.length,
@@ -163,9 +176,10 @@ class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
                                 );
                               },
                               child: Padding(
-                                padding: const EdgeInsets.all(12),
+                                padding: EdgeInsets.all(isCompact ? 10 : 12),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     // Icon and Nisab Badge
                                     Row(
@@ -174,15 +188,15 @@ class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
                                       children: [
                                         CategoryIconBadge(
                                           imagePath: item.imagePath,
-                                          size: 46,
-                                          iconSize: 26,
+                                          size: isCompact ? 40 : 46,
+                                          iconSize: isCompact ? 22 : 26,
                                           padding: 6,
                                           borderRadius: 12,
                                         ),
                                         if (item.nisabBadge.isNotEmpty)
                                           Flexible(
                                             child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                               decoration: BoxDecoration(
                                                 color: isDark
                                                     ? AppColors.emeraldPrimary.withValues(alpha: 0.22)
@@ -195,7 +209,7 @@ class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
                                               child: Text(
                                                 item.nisabBadge,
                                                 style: TextStyle(
-                                                  fontSize: 9,
+                                                  fontSize: isCompact ? 8.5 : 9,
                                                   fontWeight: FontWeight.bold,
                                                   color: isDark ? AppColors.goldLight : AppColors.emeraldPrimary,
                                                 ),
@@ -206,34 +220,32 @@ class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
                                           ),
                                       ],
                                     ),
-                                    const Spacer(),
-                                    // Title
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        item.title,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13.5,
+                                    const SizedBox(height: 6),
+                                    // Title & Description
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.title,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: isCompact ? 12 : 13.5,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    // Description
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        item.description,
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                                          height: 1.3,
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          item.description,
+                                          style: TextStyle(
+                                            fontSize: isCompact ? 9.5 : 10.5,
+                                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                            height: 1.25,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -247,6 +259,7 @@ class _CalculatorsGridScreenState extends State<CalculatorsGridScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }

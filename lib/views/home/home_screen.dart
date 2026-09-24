@@ -33,22 +33,25 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset(
-              'assets/images/MainIcon.png',
-              width: 30,
-              height: 30,
-              errorBuilder: (context, error, stackTrace) => const Icon(
-                Icons.calculate,
-                size: 26,
-                color: Colors.white,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/images/MainIcon.png',
+                width: 28,
+                height: 28,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.calculate,
+                  size: 24,
+                  color: Colors.white,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            const Text('الهيئة العامة للزكاة'),
-          ],
+              const SizedBox(width: 8),
+              const Text('الهيئة العامة للزكاة'),
+            ],
+          ),
         ),
         centerTitle: true,
         actions: [
@@ -101,17 +104,45 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       body: RefreshIndicator(
+        color: AppColors.goldAccent,
+        backgroundColor: isDark ? AppColors.darkCard : Colors.white,
         onRefresh: () async {
+          final cloudSync = Provider.of<CloudSyncService>(context, listen: false);
+          try {
+            await Future.wait([
+              cloudSync.refreshAll(),
+              zakatProv.fetchAndApplyMarketPrices(),
+            ]).timeout(const Duration(seconds: 4));
+          } catch (_) {}
+          zakatProv.reloadPricesFromPreferences();
           zakatProv.loadRecords();
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text('تم تحديث الأسعار والبيانات بنجاح'),
+                  ],
+                ),
+                backgroundColor: AppColors.emeraldPrimary,
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
         },
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          padding: context.rPadding(horizontal: 16, vertical: 16),
+          child: ResponsiveConstraint(
+            maxWidth: 950,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               // User Greeting & Welcome Banner
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(context.rSpacing(16)),
                 decoration: BoxDecoration(
                   gradient: AppColors.primaryGradient,
                   borderRadius: BorderRadius.circular(20),
@@ -124,102 +155,146 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Top row: Authority badge and Hijri Date badge
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: AppColors.goldAccent, width: 2),
-                                  color: Colors.white24,
-                                ),
-                                child: ClipOval(
-                                  child: (authProv.isAuthenticated &&
-                                          authProv.user?.profileImagePath != null &&
-                                          File(authProv.user!.profileImagePath!).existsSync())
-                                      ? Image.file(
-                                          File(authProv.user!.profileImagePath!),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Center(
-                                          child: Text(
-                                            authProv.user?.name.isNotEmpty == true
-                                                ? authProv.user!.name[0].toUpperCase()
-                                                : 'ز',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                            ),
-                                          ),
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      authProv.isAuthenticated && authProv.user?.name.isNotEmpty == true
-                                          ? 'أهلاً بك، ${authProv.user!.name}'
-                                          : 'أهلاً بك، ضيفنا الكريم',
-                                      style: TextStyle(
-                                        fontSize: context.rFont(17),
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.verified, size: 12, color: AppColors.goldLight),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    'الهيئة العامة للزكاة',
+                                    style: TextStyle(
+                                      fontSize: context.rFont(10.5),
+                                      color: Colors.white.withValues(alpha: 0.95),
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '{وَأَقِيمُوا الصَّلَاةَ وَآتُوا الزَّكَاةَ}',
-                                      style: TextStyle(
-                                        fontSize: context.rFont(12),
-                                        color: Colors.white.withValues(alpha: 0.85),
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.goldAccent.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.goldAccent),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.goldAccent.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.goldAccent.withValues(alpha: 0.6)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.calendar_today, size: 11, color: AppColors.goldLight),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    AppFormatters.formatDate(DateTime.now()),
+                                    style: TextStyle(
+                                      fontSize: context.rFont(10.5),
+                                      color: AppColors.goldLight,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: Row(
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Main Greeting Row: Avatar + Full Name / Greeting taking full horizontal width
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: context.rWidth(48),
+                          height: context.rWidth(48),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.goldAccent, width: 2),
+                            color: Colors.white24,
+                          ),
+                          child: ClipOval(
+                            child: (authProv.isAuthenticated &&
+                                    authProv.user?.profileImagePath != null &&
+                                    File(authProv.user!.profileImagePath!).existsSync())
+                                ? Image.file(
+                                    File(authProv.user!.profileImagePath!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : Center(
+                                    child: Text(
+                                      authProv.isAuthenticated && authProv.user?.name.isNotEmpty == true
+                                          ? authProv.user!.name[0].toUpperCase()
+                                          : 'ز',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 20,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        SizedBox(width: context.rSpacing(12)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.calendar_today, size: 14, color: AppColors.goldLight),
-                              const SizedBox(width: 6),
                               Text(
-                                AppFormatters.formatDate(DateTime.now()),
-                                style: const TextStyle(fontSize: 12, color: AppColors.goldLight, fontWeight: FontWeight.bold),
+                                authProv.isAuthenticated && authProv.user?.name.isNotEmpty == true
+                                    ? 'أهلاً بك، ${authProv.user!.name}'
+                                    : 'أهلاً بك، ضيفنا الكريم',
+                                style: TextStyle(
+                                  fontSize: context.rFont(17),
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.2,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.visible,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '﴿وَأَقِيمُوا الصَّلَاةَ وَآتُوا الزَّكَاةَ﴾',
+                                style: TextStyle(
+                                  fontSize: context.rFont(12.5),
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.visible,
                               ),
                             ],
                           ),
                         ),
                       ],
                     ),
+
                     if (!authProv.isAuthenticated) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       InkWell(
                         onTap: () async {
                           if (authProv.hasAccountOnDevice) {
@@ -235,28 +310,36 @@ class HomeScreen extends StatelessWidget {
                             );
                           }
                         },
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(14),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(14),
                             border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
                           ),
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 authProv.hasAccountOnDevice ? Icons.fingerprint : Icons.login,
                                 size: 16,
                                 color: Colors.white,
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                authProv.hasAccountOnDevice
-                                    ? 'دخول بحسابك (${authProv.lastKnownUser?.name ?? ''}) أو بالمصادقة'
-                                    : 'تسجيل الدخول / إنشاء حساب',
-                                style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  authProv.hasAccountOnDevice
+                                      ? 'دخول بحسابك (${authProv.lastKnownUser?.name ?? ''}) أو بالمصادقة'
+                                      : 'تسجيل الدخول / إنشاء حساب للمزامنة',
+                                  style: TextStyle(
+                                    fontSize: context.rFont(12.5),
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                               const SizedBox(width: 4),
                               const Icon(Icons.arrow_forward_ios, size: 10, color: Colors.white70),
@@ -885,7 +968,10 @@ class HomeScreen extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.share_outlined, color: AppColors.emeraldPrimary, size: 20),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              icon: const Icon(Icons.share_outlined, color: AppColors.emeraldPrimary, size: 18),
                               tooltip: 'مشاركة الملخص',
                               onPressed: () {
                                 PdfService.shareSummaryText(
@@ -900,7 +986,10 @@ class HomeScreen extends StatelessWidget {
                               },
                             ),
                             IconButton(
-                              icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.goldDark, size: 20),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.goldDark, size: 18),
                               tooltip: 'تصدير PDF',
                               onPressed: () async {
                                 final bytes = await PdfService.generateZakatReceipt(rec);
@@ -914,7 +1003,10 @@ class HomeScreen extends StatelessWidget {
                               },
                             ),
                             IconButton(
-                              icon: Icon(Icons.delete_outline, color: Colors.red.shade300, size: 20),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              icon: Icon(Icons.delete_outline, color: Colors.red.shade300, size: 18),
                               tooltip: 'حذف من السجل',
                               onPressed: () async {
                                 final confirm = await showDialog<bool>(
@@ -974,7 +1066,8 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -14,6 +14,7 @@ import '../../core/services/backup_service.dart';
 import '../permissions/permissions_screen.dart';
 import '../auth/login_screen.dart';
 import '../../core/utils/auth_guard.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/services/cloud_sync_service.dart';
 
 
@@ -95,7 +96,9 @@ class SettingsScreen extends StatelessWidget {
             children: [
               Icon(Icons.badge_outlined, color: AppColors.emeraldPrimary),
               SizedBox(width: 8),
-              Text('تعديل الاسم والملف الشخصي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text('تعديل الاسم والملف الشخصي', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -329,7 +332,9 @@ class SettingsScreen extends StatelessWidget {
             children: [
               Icon(Icons.settings_backup_restore, color: AppColors.emeraldPrimary),
               SizedBox(width: 8),
-              Text('استعادة البيانات المشفرة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text('استعادة البيانات المشفرة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -433,10 +438,14 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('الإعدادات والتفضيلات'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // User Card
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ResponsiveConstraint(
+          maxWidth: 720,
+          child: ListView(
+            padding: context.rPadding(horizontal: 16, vertical: 16),
+            children: [
+              // User Card
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -692,9 +701,13 @@ class SettingsScreen extends StatelessWidget {
                 children: [
                   Icon(Icons.cloud_done, size: 14, color: AppColors.emeraldPrimary.withValues(alpha: 0.7)),
                   const SizedBox(width: 6),
-                  Text(
-                    'آخر تحديث سحابي: ${cloudSync.pricesLastUpdated!.day}/${cloudSync.pricesLastUpdated!.month}/${cloudSync.pricesLastUpdated!.year} - ${cloudSync.pricesLastUpdated!.hour}:${cloudSync.pricesLastUpdated!.minute.toString().padLeft(2, "0")}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  Expanded(
+                    child: Text(
+                      'آخر تحديث سحابي: ${cloudSync.pricesLastUpdated!.day}/${cloudSync.pricesLastUpdated!.month}/${cloudSync.pricesLastUpdated!.year} - ${cloudSync.pricesLastUpdated!.hour}:${cloudSync.pricesLastUpdated!.minute.toString().padLeft(2, "0")}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -747,15 +760,18 @@ class SettingsScreen extends StatelessWidget {
                   child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
+                        await cloudSync.refreshAll();
                         zakatProv.reloadPricesFromPreferences();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('تمت مزامنة وتحديث الأسعار الرسمية بنجاح.'),
-                            backgroundColor: AppColors.emeraldPrimary,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('تمت مزامنة وتحديث الأسعار الرسمية بنجاح.'),
+                              backgroundColor: AppColors.emeraldPrimary,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
                       },
                       icon: const Icon(Icons.sync),
                       label: const Text(
@@ -817,9 +833,11 @@ class SettingsScreen extends StatelessWidget {
                     children: [
                       Icon(Icons.headset_mic_outlined, color: AppColors.emeraldPrimary, size: 22),
                       SizedBox(width: 8),
-                      Text(
-                        'قنوات التواصل الرسمية وخدمة الجمهور',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      Expanded(
+                        child: Text(
+                          'قنوات التواصل الرسمية وخدمة الجمهور',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                        ),
                       ),
                     ],
                   ),
@@ -966,6 +984,8 @@ class SettingsScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 }

@@ -1,16 +1,104 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import '../../firebase_options.dart';
+
+/// معالج إشعارات الخلفية ونظام أندرويد المعزول
+/// (يعمل حتى والتطبيق مغلق تماماً وغير موجود في الرام / Killed / Terminated)
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init error in background handler: $e');
+  }
+
+  debugPrint('📩 FCM Background message received: ${message.messageId}');
+  debugPrint('FCM Data: ${message.data}');
+  debugPrint('FCM Notification: ${message.notification?.title} - ${message.notification?.body}');
+
+  // تهيئة الإشعارات في بيئة الخلفية المعزولة لضمان ظهور التنبيه
+  final FlutterLocalNotificationsPlugin bgPlugin = FlutterLocalNotificationsPlugin();
+  const AndroidInitializationSettings androidSettings =
+      AndroidInitializationSettings('@mipmap/launcher_icon');
+  const InitializationSettings initSettings = InitializationSettings(
+    android: androidSettings,
+  );
+  try {
+    await bgPlugin.initialize(initSettings);
+  } catch (e) {
+    debugPrint('Error initializing local notifications in bg handler: $e');
+  }
+
+  const androidChannel = AndroidNotificationChannel(
+    NotificationService.channelId,
+    NotificationService.channelName,
+    description: NotificationService.channelDescription,
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+  );
+
+  final androidPlatform = bgPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  await androidPlatform?.createNotificationChannel(androidChannel);
+
+  // استخراج العنوان والمحتوى
+  String title = message.notification?.title ?? message.data['title']?.toString() ?? 'الهيئة العامة للزكاة';
+  String body = message.notification?.body ?? message.data['body']?.toString() ?? message.data['content']?.toString() ?? '';
+  final priority = message.data['priority']?.toString();
+
+  if (priority == 'urgent' && !title.contains('[عاجل]')) {
+    title = '🚨 [عاجل] $title';
+  } else if (!title.contains('📢') && !title.contains('🚨') && !title.contains('⚠️') && !title.contains('🔔')) {
+    title = '📢 $title';
+  }
+
+  // إذا لم تحتوِ الرسالة على Notification أصلي وعولجت كـ Data-only، نعرضها محلياً فوراً
+  if (message.notification == null && body.isNotEmpty) {
+    final dynamicBigText = AndroidNotificationDetails(
+      NotificationService.channelId,
+      NotificationService.channelName,
+      channelDescription: NotificationService.channelDescription,
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/launcher_icon',
+      showWhen: true,
+      playSound: true,
+      enableVibration: true,
+      ticker: 'إشعار جديد من الهيئة العامة للزكاة',
+      visibility: NotificationVisibility.public,
+      styleInformation: BigTextStyleInformation(
+        body,
+        contentTitle: title,
+        summaryText: 'الهيئة العامة للزكاة',
+      ),
+    );
+
+    await bgPlugin.show(
+      (message.data['id']?.hashCode ?? DateTime.now().millisecondsSinceEpoch) % 100000,
+      title,
+      body,
+      NotificationDetails(android: dynamicBigText),
+      payload: message.data['targetId']?.toString() ?? message.data['id']?.toString(),
+    );
+  }
+}
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
+  static final FirebaseMessaging _fcm = FirebaseMessaging.instance;
 
   static const String channelId = 'zakat_alerts_channel';
-  static const String channelName = 'تنبيهات الزكاة والحول';
+  static const String channelName = 'تنبيهات الزكاة والحول والإعلانات';
   static const String channelDescription =
-      'قناة مخصصة لإرسال إشعارات مواقيت الزكاة، تذكيرات الحول الهجري، وسجلات الحسابات.';
+      'قناة مخصصة لإرسال إشعارات مواقيت الزكاة، تذكيرات الحول الهجري، والإعلانات والتعميمات الرسمية.';
 
   // Scheduled notification IDs for Hawl milestones
   static const int hawl30DaysAlertId = 1101;
@@ -18,13 +106,14 @@ class NotificationService {
   static const int hawlDueDateAlertId = 1103;
 
   static Future<void> init() async {
-    // Initialize timezone database for smart scheduled alarms
+    // 1. Initialize timezone database for smart scheduled alarms
     try {
       tz.initializeTimeZones();
     } catch (e) {
       debugPrint('Error initializing timezone: $e');
     }
 
+    // 2. Initialize Local Notifications Plugin
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/launcher_icon');
 
@@ -42,11 +131,11 @@ class NotificationService {
     await _notificationsPlugin.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        // Handle notification click if needed
+        _handleNotificationTap(response.payload);
       },
     );
 
-    // Create Notification Channel for Android
+    // 3. Create Notification Channel for Android
     const androidChannel = AndroidNotificationChannel(
       channelId,
       channelName,
@@ -65,6 +154,106 @@ class NotificationService {
     } catch (e) {
       debugPrint('NotificationService: request permission error: $e');
     }
+
+    // 4. Initialize Firebase Cloud Messaging (FCM)
+    await _initFCM();
+  }
+
+  static Future<void> _initFCM() async {
+    try {
+      // طلب إذن الإشعارات من المستخدم لنظام iOS و Android 13+
+      final settings = await _fcm.requestPermission(
+        alert: true,
+        announcement: true,
+        badge: true,
+        carPlay: false,
+        criticalAlert: true,
+        provisional: false,
+        sound: true,
+      );
+
+      debugPrint('FCM Authorization Status: ${settings.authorizationStatus}');
+
+      // تفعيل إظهار الإشعارات في الواجهة الأمامية
+      await _fcm.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      // الاشتراك التلقائي في قنوات ومواضيع البث العام
+      await _fcm.subscribeToTopic('announcements');
+      await _fcm.subscribeToTopic('zakat_alerts');
+      await _fcm.subscribeToTopic('all_users');
+      debugPrint('FCM: Successfully subscribed to topics (announcements, zakat_alerts, all_users)');
+
+      // جلب وحفظ توكن الجهاز للتشخيص
+      final token = await _fcm.getToken();
+      debugPrint('FCM Device Token: $token');
+
+      // الاستماع للرسائل أثناء وجود التطبيق في الواجهة الأمامية (Foreground)
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('FCM Foreground message received: ${message.data}');
+        final notification = message.notification;
+        if (notification != null) {
+          showNotification(
+            id: message.messageId.hashCode % 100000,
+            title: notification.title ?? 'الهيئة العامة للزكاة',
+            body: notification.body ?? '',
+            payload: message.data['targetId']?.toString() ?? message.data['id']?.toString(),
+          );
+        } else if (message.data.isNotEmpty) {
+          final title = message.data['title']?.toString() ?? 'الهيئة العامة للزكاة';
+          final body = message.data['body']?.toString() ?? message.data['content']?.toString() ?? '';
+          if (body.isNotEmpty) {
+            showNotification(
+              id: (message.data['id']?.hashCode ?? DateTime.now().millisecondsSinceEpoch) % 100000,
+              title: title,
+              body: body,
+              payload: message.data['targetId']?.toString() ?? message.data['id']?.toString(),
+            );
+          }
+        }
+      });
+
+      // التعامل مع فتح التطبيق بالنقر على الإشعار من شريط الإشعارات أثناء وجوده في الخلفية
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        debugPrint('FCM Notification tapped (from background): ${message.data}');
+        _handleNotificationTap(message.data['targetId']?.toString() ?? message.data['id']?.toString());
+      });
+
+      // التعامل مع فتح التطبيق بالنقر على الإشعار عندما كان التطبيق مغلقاً تماماً (Terminated / Killed)
+      final initialMessage = await _fcm.getInitialMessage();
+      if (initialMessage != null) {
+        debugPrint('FCM Initial message found (app launched from notification): ${initialMessage.data}');
+        _handleNotificationTap(initialMessage.data['targetId']?.toString() ?? initialMessage.data['id']?.toString());
+      }
+    } catch (e) {
+      debugPrint('FCM Initialization error: $e');
+    }
+  }
+
+  static Future<void> subscribeToUserTopic(String uid) async {
+    try {
+      await _fcm.subscribeToTopic('user_$uid');
+      debugPrint('FCM: Subscribed to user topic user_$uid');
+    } catch (e) {
+      debugPrint('FCM: Error subscribing to user topic: $e');
+    }
+  }
+
+  static Future<void> unsubscribeFromUserTopic(String uid) async {
+    try {
+      await _fcm.unsubscribeFromTopic('user_$uid');
+      debugPrint('FCM: Unsubscribed from user topic user_$uid');
+    } catch (e) {
+      debugPrint('FCM: Error unsubscribing from user topic: $e');
+    }
+  }
+
+  static void _handleNotificationTap(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    debugPrint('Notification clicked with payload: $payload');
   }
 
   static Future<void> showTestNotification() async {

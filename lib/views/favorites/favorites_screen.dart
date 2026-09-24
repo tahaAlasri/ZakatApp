@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/category_icon_badge.dart';
 import '../../models/favorite_item.dart';
 import '../../providers/favorites_provider.dart';
@@ -105,9 +106,13 @@ class FavoritesScreen extends StatelessWidget {
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: items.length,
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ResponsiveConstraint(
+              maxWidth: 720,
+              child: ListView.builder(
+                padding: context.rPadding(horizontal: 16, vertical: 12),
+                itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
               return Dismissible(
@@ -181,8 +186,10 @@ class FavoritesScreen extends StatelessWidget {
                 ),
               );
             },
-          );
-        },
+          ),
+        ),
+      );
+    },
       ),
     );
   }

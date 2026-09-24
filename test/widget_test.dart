@@ -35,6 +35,10 @@ import 'package:zakat_app/core/calculators/livestock_calculator.dart';
 import 'package:zakat_app/core/calculators/fitr_calculator.dart';
 import 'package:zakat_app/core/calculators/stocks_crypto_calculator.dart';
 import 'package:zakat_app/core/utils/app_input_formatters.dart';
+import 'package:zakat_app/core/services/app_lock_manager.dart';
+import 'package:zakat_app/views/auth/app_lock_screen.dart';
+import 'package:zakat_app/providers/theme_provider.dart';
+import 'package:zakat_app/main.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -45,6 +49,7 @@ void main() {
     final tempDir = Directory.systemTemp.createTempSync('zakat_test_hive_');
     Hive.init(tempDir.path);
     await initializeDateFormatting('ar', null);
+    await PreferencesService.init();
     await LocalDbService.init();
   });
 
@@ -2559,7 +2564,113 @@ void main() {
       expect(find.textContaining('ضم الذهب إلى الفضة بالأجزاء'), findsAtLeastNWidgets(1));
     });
   });
+
+  group('21. App Lock & 1-Minute Security Timeout Tests', () {
+    test('1. Guest / Initial fresh install: Leaving app does NOT lock', () async {
+      AuthService.setCurrentUserForTesting(null);
+      final lockManager = AppLockManager();
+      lockManager.unlock();
+
+      expect(lockManager.isLocked, isFalse);
+
+      // Simulate app pause
+      lockManager.didChangeAppLifecycleState(AppLifecycleState.paused);
+      // Simulate app resume after 2 minutes
+      lockManager.didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+      // Still unlocked for guests
+      expect(lockManager.isLocked, isFalse);
+    });
+
+    test('2. Authenticated user: Leaving app < 60 seconds does NOT lock', () async {
+      final testUser = UserModel(
+        id: 'test_user_lock_1',
+        name: 'طه العسري',
+        email: 'taha@example.com',
+        phone: '777123456',
+      );
+      AuthService.setCurrentUserForTesting(testUser);
+      final lockManager = AppLockManager();
+      lockManager.unlock();
+
+      expect(lockManager.isLocked, isFalse);
+
+      // Pause app
+      lockManager.didChangeAppLifecycleState(AppLifecycleState.paused);
+      // Fast resume (less than 1 minute)
+      lockManager.didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+      expect(lockManager.isLocked, isFalse);
+    });
+
+    test('3. Authenticated user: Leaving app >= 60 seconds triggers lock', () async {
+      final testUser = UserModel(
+        id: 'test_user_lock_2',
+        name: 'طه العسري',
+        email: 'taha@example.com',
+        phone: '777123456',
+      );
+      AuthService.setCurrentUserForTesting(testUser);
+      final lockManager = AppLockManager();
+      lockManager.unlock();
+
+      // Simulate pause timestamp 65 seconds ago
+      lockManager.setPausedTimeForTesting(DateTime.now().subtract(const Duration(seconds: 65)));
+
+      // Resume app
+      lockManager.didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+      expect(lockManager.isLocked, isTrue);
+
+      // Manual unlock
+      lockManager.unlock();
+      expect(lockManager.isLocked, isFalse);
+    });
+
+    testWidgets('4. App Lock UI displays AppLockScreen when locked and disappears upon unlock', (tester) async {
+      final testUser = UserModel(
+        id: 'test_user_ui_lock',
+        name: 'طه العسري',
+        email: 'taha@example.com',
+        phone: '777123456',
+      );
+      AuthService.setCurrentUserForTesting(testUser);
+      final lockManager = AppLockManager();
+      lockManager.unlock();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => ThemeProvider()),
+            ChangeNotifierProvider(create: (_) => AuthProvider()),
+            ChangeNotifierProvider.value(value: lockManager),
+          ],
+          child: const ZakatApp(),
+        ),
+      );
+      await tester.pump();
+
+      // Initially unlocked
+      expect(find.byType(AppLockScreen), findsNothing);
+
+      // Lock the app
+      lockManager.lock();
+      await tester.pump();
+
+      // AppLockScreen should appear
+      expect(find.byType(AppLockScreen), findsOneWidget);
+      expect(find.textContaining('تم قفل التطبيق تلقائياً'), findsOneWidget);
+
+      // Unlock the app
+      lockManager.unlock();
+      await tester.pump();
+
+      // AppLockScreen must disappear immediately!
+      expect(find.byType(AppLockScreen), findsNothing);
+    });
+  });
 }
+
 
 
 
