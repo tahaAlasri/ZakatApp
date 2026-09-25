@@ -240,7 +240,7 @@ flutter build apk --release
 
 * **المشروع:** تطبيق زكاتي لحساب وإدارة الزكاة الشرعية (ZakatApp)
 * **المادة:** تطوير تطبيقات الهواتف الذكية (Mobile Application Development)
-* **المطور:** طه العسري (Taha Alasri)
+* **المطور:** طه العصري (Taha Alasri)
 * **المستودع:** [https://github.com/tahaAlasri/ZakatApp](https://github.com/tahaAlasri/ZakatApp)
 
 ---
