@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore';
-import { db } from './firebase';
+import { signOut } from 'firebase/auth';
+import { auth, db } from './firebase';
 import Sidebar from './components/Sidebar';
 import DashboardHome from './pages/DashboardHome';
 import RequestsInbox from './pages/RequestsInbox';
@@ -12,12 +13,24 @@ import { Menu, Bell, Volume2, VolumeX } from 'lucide-react';
 import { getLocalCollection, getLocalDoc } from './utils/firestoreSafe';
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() =>
-    localStorage.getItem('zakat_admin_auth') === 'true'
-  );
+  // عند الدخول للموقع يتم دائماً طلب تسجيل الدخول أولاً في كل جلسة جديدة
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      // تنظيف أي بيانات دخول قديمة ودائمة في localStorage
+      localStorage.removeItem('zakat_admin_auth');
+      localStorage.removeItem('zakat_admin_user');
+      return sessionStorage.getItem('zakat_admin_auth') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   const [adminUser, setAdminUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('zakat_admin_user')) || null; }
-    catch { return null; }
+    try {
+      return JSON.parse(sessionStorage.getItem('zakat_admin_user')) || null;
+    } catch {
+      return null;
+    }
   });
 
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -119,15 +132,32 @@ export default function App() {
   }, [isAuthenticated, playChime]);
 
   const handleLoginSuccess = (user) => {
-    setIsAuthenticated(true); setAdminUser(user);
-    localStorage.setItem('zakat_admin_auth', 'true');
-    localStorage.setItem('zakat_admin_user', JSON.stringify(user));
+    setIsAuthenticated(true);
+    setAdminUser(user);
+    try {
+      sessionStorage.setItem('zakat_admin_auth', 'true');
+      sessionStorage.setItem('zakat_admin_user', JSON.stringify(user));
+    } catch (e) {
+      console.warn('Session storage error:', e);
+    }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false); setAdminUser(null);
-    localStorage.removeItem('zakat_admin_auth');
-    localStorage.removeItem('zakat_admin_user');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn('Sign out error:', e);
+    }
+    setIsAuthenticated(false);
+    setAdminUser(null);
+    try {
+      sessionStorage.removeItem('zakat_admin_auth');
+      sessionStorage.removeItem('zakat_admin_user');
+      localStorage.removeItem('zakat_admin_auth');
+      localStorage.removeItem('zakat_admin_user');
+    } catch (e) {
+      console.warn('Storage clear error:', e);
+    }
   };
 
   if (!isAuthenticated) return <AdminAuth onLoginSuccess={handleLoginSuccess} />;

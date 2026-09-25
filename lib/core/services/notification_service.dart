@@ -93,7 +93,15 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
-  static final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+
+  static FirebaseMessaging? get _fcm {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseMessaging.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   static const String channelId = 'zakat_alerts_channel';
   static const String channelName = 'تنبيهات الزكاة والحول والإعلانات';
@@ -128,41 +136,48 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _notificationsPlugin.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        _handleNotificationTap(response.payload);
-      },
-    );
-
-    // 3. Create Notification Channel for Android
-    const androidChannel = AndroidNotificationChannel(
-      channelId,
-      channelName,
-      description: channelDescription,
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-    );
-
-    final androidPlugin = _notificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(androidChannel);
-
     try {
-      await androidPlugin?.requestNotificationsPermission();
+      await _notificationsPlugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          _handleNotificationTap(response.payload);
+        },
+      ).timeout(const Duration(seconds: 2));
     } catch (e) {
-      debugPrint('NotificationService: request permission error: $e');
+      debugPrint('NotificationPlugin init error: $e');
     }
 
-    // 4. Initialize Firebase Cloud Messaging (FCM)
-    await _initFCM();
+    // 3. Create Notification Channel for Android
+    try {
+      const androidChannel = AndroidNotificationChannel(
+        channelId,
+        channelName,
+        description: channelDescription,
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+
+      final androidPlugin = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.createNotificationChannel(androidChannel);
+    } catch (e) {
+      debugPrint('NotificationService: create channel error: $e');
+    }
+
+    // 4. Initialize Firebase Cloud Messaging (FCM) in background (non-blocking)
+    _initFCM().catchError((e) {
+      debugPrint('FCM init background error: $e');
+    });
   }
 
   static Future<void> _initFCM() async {
+    final fcm = _fcm;
+    if (fcm == null) return;
+
     try {
       // طلب إذن الإشعارات من المستخدم لنظام iOS و Android 13+
-      final settings = await _fcm.requestPermission(
+      await fcm.requestPermission(
         alert: true,
         announcement: true,
         badge: true,
@@ -170,26 +185,24 @@ class NotificationService {
         criticalAlert: true,
         provisional: false,
         sound: true,
-      );
-
-      debugPrint('FCM Authorization Status: ${settings.authorizationStatus}');
+      ).timeout(const Duration(seconds: 3));
 
       // تفعيل إظهار الإشعارات في الواجهة الأمامية
-      await _fcm.setForegroundNotificationPresentationOptions(
+      await fcm.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
         sound: true,
-      );
+      ).timeout(const Duration(seconds: 2));
 
-      // الاشتراك التلقائي في قنوات ومواضيع البث العام
-      await _fcm.subscribeToTopic('announcements');
-      await _fcm.subscribeToTopic('zakat_alerts');
-      await _fcm.subscribeToTopic('all_users');
-      debugPrint('FCM: Successfully subscribed to topics (announcements, zakat_alerts, all_users)');
+      // الاشتراك التلقائي في قنوات ومواضيع البث العام في الخلفية
+      fcm.subscribeToTopic('announcements').catchError((_) {});
+      fcm.subscribeToTopic('zakat_alerts').catchError((_) {});
+      fcm.subscribeToTopic('all_users').catchError((_) {});
 
-      // جلب وحفظ توكن الجهاز للتشخيص
-      final token = await _fcm.getToken();
-      debugPrint('FCM Device Token: $token');
+      // جلب توكن الجهاز
+      fcm.getToken().then((token) {
+        debugPrint('FCM Device Token: $token');
+      }).catchError((_) {});
 
       // الاستماع للرسائل أثناء وجود التطبيق في الواجهة الأمامية (Foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -223,7 +236,7 @@ class NotificationService {
       });
 
       // التعامل مع فتح التطبيق بالنقر على الإشعار عندما كان التطبيق مغلقاً تماماً (Terminated / Killed)
-      final initialMessage = await _fcm.getInitialMessage();
+      final initialMessage = await fcm.getInitialMessage();
       if (initialMessage != null) {
         debugPrint('FCM Initial message found (app launched from notification): ${initialMessage.data}');
         _handleNotificationTap(initialMessage.data['targetId']?.toString() ?? initialMessage.data['id']?.toString());
@@ -235,7 +248,7 @@ class NotificationService {
 
   static Future<void> subscribeToUserTopic(String uid) async {
     try {
-      await _fcm.subscribeToTopic('user_$uid');
+      await _fcm?.subscribeToTopic('user_$uid');
       debugPrint('FCM: Subscribed to user topic user_$uid');
     } catch (e) {
       debugPrint('FCM: Error subscribing to user topic: $e');
@@ -244,7 +257,7 @@ class NotificationService {
 
   static Future<void> unsubscribeFromUserTopic(String uid) async {
     try {
-      await _fcm.unsubscribeFromTopic('user_$uid');
+      await _fcm?.unsubscribeFromTopic('user_$uid');
       debugPrint('FCM: Unsubscribed from user topic user_$uid');
     } catch (e) {
       debugPrint('FCM: Error unsubscribing from user topic: $e');

@@ -13,7 +13,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/local_db_service.dart';
 import '../../core/services/pdf_service.dart';
-import '../../core/services/auth_service.dart';
 import '../../core/utils/app_input_formatters.dart';
 import '../../models/assistance_request.dart';
 import '../../providers/auth_provider.dart';
@@ -174,41 +173,6 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
       return;
     }
 
-    if (!AuthService.isFirebaseAuthenticated) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          icon: const Icon(Icons.cloud_off_outlined, color: AppColors.warning, size: 40),
-          title: const Text('تسجيل الدخول بالإنترنت مطلوب', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text(
-            'لتقديم طلب رسمي يصل إلى الهيئة العامة للزكاة، يجب تسجيل الدخول بحسابك عبر الإنترنت.\n\nإذا سجلت بالبصمة فقط أو بدون إنترنت، يرجى إعادة تسجيل الدخول بالبريد وكلمة المرور.',
-            style: TextStyle(fontSize: 13, height: 1.6),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.login_rounded, size: 18),
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.emeraldPrimary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              label: const Text('تسجيل الدخول'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -250,8 +214,9 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
 
       final cloudSync = Provider.of<CloudSyncService>(context, listen: false);
 
-      // FIX: كانت بدون await - الآن ننتظر النتيجة ونعالج الخطأ
-      final refCode = await cloudSync.submitOfficialRequest(request);
+      final result = await cloudSync.submitOfficialRequest(request);
+      final refCode = result.referenceCode;
+      final isCloudSaved = result.isCloudSaved;
 
       if (!mounted) return;
       setState(() {
@@ -262,19 +227,43 @@ class _AssistanceRequestScreenState extends State<AssistanceRequestScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ تم تقديم الطلب رسمياً برقم المرجع: $refCode'),
-          backgroundColor: AppColors.success,
+          content: Row(
+            children: [
+              Icon(
+                isCloudSaved ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isCloudSaved
+                      ? '✅ تم إرسال طلبك رسمياً إلى خوادم الهيئة برقم المرجع: $refCode'
+                      : '📥 تم حفظ طلبك محلياً على جهازك برقم المرجع: $refCode\n(سيتم رفعه تلقائياً فور توفر الإنترنت)',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: isCloudSaved ? AppColors.success : AppColors.warning,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 5),
         ),
       );
 
-      // الانتقال لصفحة متابعة الطلبات
+      // الانتقال لصفحة متابعة الطلبات مع الحفاظ على مسار التنقل
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const MyRequestsScreen()),
-        );
+        if (Navigator.canPop(context)) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const MyRequestsScreen()),
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MyRequestsScreen()),
+          );
+        }
       }
     } catch (e) {
       if (!mounted) return;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/preferences_service.dart';
@@ -17,6 +18,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
   late Animation<double> _pulseAnimation;
+  Timer? _fallbackTimer;
+  bool _hasNavigated = false;
 
   @override
   void initState() {
@@ -24,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 2000),
     );
 
     _scaleAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
@@ -48,33 +51,52 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       ),
     );
 
-    _controller.forward().then((_) => _navigateToNext());
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _navigateToNext();
+      }
+    });
+
+    _controller.forward().catchError((_) {});
+
+    // مؤقت أمان يضمن الانتقال للرئيسية حتى لو تعطلت الأنيميشن أو حدث تأخير
+    _fallbackTimer = Timer(const Duration(milliseconds: 2400), () {
+      _navigateToNext();
+    });
   }
 
-  void _navigateToNext() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
+  void _navigateToNext() {
+    if (_hasNavigated || !mounted) return;
+    _hasNavigated = true;
+    _fallbackTimer?.cancel();
 
-    final isOnboardingCompleted = PreferencesService.isOnboardingCompleted;
+    try {
+      final isOnboardingCompleted = PreferencesService.isOnboardingCompleted;
 
-    // Enter directly to MainNavigationScreen (as guest or authenticated user)
-    final Widget nextScreen = isOnboardingCompleted
-        ? const MainNavigationScreen()
-        : const OnboardingScreen();
+      final Widget nextScreen = isOnboardingCompleted
+          ? const MainNavigationScreen()
+          : const OnboardingScreen();
 
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 600),
-      ),
-    );
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 400),
+        ),
+      );
+    } catch (_) {
+      // Fallback مباشر عند أي خطأ غير متوقع
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+      );
+    }
   }
 
   @override
   void dispose() {
+    _fallbackTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -82,9 +104,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _navigateToNext,
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topRight,
@@ -226,6 +251,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           },
         ),
       ),
+    ),
     );
   }
 }

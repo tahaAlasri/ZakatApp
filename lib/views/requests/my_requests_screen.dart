@@ -6,12 +6,16 @@ import '../../core/services/cloud_sync_service.dart';
 import '../../core/services/pdf_service.dart';
 import '../../core/utils/responsive_helper.dart';
 import '../../models/assistance_request.dart';
+import '../dashboard/main_navigation_screen.dart';
 import 'assistance_request_screen.dart';
 
 class MyRequestsScreen extends StatelessWidget {
   const MyRequestsScreen({super.key});
 
   Color _getStatusColor(String status) {
+    if (status.contains('محلياً')) {
+      return Colors.amber.shade800;
+    }
     switch (status) {
       case 'approved':
       case 'تمت الموافقة':
@@ -34,6 +38,9 @@ class MyRequestsScreen extends StatelessWidget {
   }
 
   IconData _getStatusIcon(String status) {
+    if (status.contains('محلياً')) {
+      return Icons.cloud_off_rounded;
+    }
     switch (status) {
       case 'approved':
       case 'تمت الموافقة':
@@ -82,22 +89,46 @@ class MyRequestsScreen extends StatelessWidget {
     final cloudSync = Provider.of<CloudSyncService>(context);
     final requests = cloudSync.myRequests;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('متابعة طلباتي'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline),
-            tooltip: 'تقديم طلب جديد',
+    return PopScope(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+            (route) => false,
+          );
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('متابعة طلباتي'),
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'رجوع',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AssistanceRequestScreen()),
-              );
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+                  (route) => false,
+                );
+              }
             },
           ),
-        ],
-      ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              tooltip: 'تقديم طلب جديد',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AssistanceRequestScreen()),
+                );
+              },
+            ),
+          ],
+        ),
       body: ResponsiveConstraint(
         maxWidth: 720,
         child: requests.isEmpty
@@ -294,6 +325,31 @@ class MyRequestsScreen extends StatelessWidget {
                           ),
                         ),
 
+                        // Offline Local Notice (if pending sync)
+                        if (req.status.contains('محلياً')) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.cloud_off_rounded, size: 18, color: Colors.amber),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'الطلب محفوظ بأمان على جهازك وسيتم رفعه تلقائياً لخوادم الهيئة فور توفر الإنترنت.',
+                                    style: TextStyle(fontSize: 11.5, color: Colors.amber, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+
                         // Admin Response / Instructions (if available)
                         if (req.adminResponse != null && req.adminResponse!.isNotEmpty) ...[
                           const SizedBox(height: 14),
@@ -380,6 +436,7 @@ class MyRequestsScreen extends StatelessWidget {
                 );
               },
             ),
+      ),
       ),
     );
   }

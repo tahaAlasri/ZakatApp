@@ -23,7 +23,9 @@ class EncryptionService {
     if (_cachedKey != null) return _cachedKey!;
 
     try {
-      final storedBase64 = await _storage.read(key: _storageKey);
+      final storedBase64 = await _storage
+          .read(key: _storageKey)
+          .timeout(const Duration(milliseconds: 1500));
       if (storedBase64 != null && storedBase64.isNotEmpty) {
         final keyBytes = base64Decode(storedBase64);
         if (keyBytes.length == 32) {
@@ -35,7 +37,9 @@ class EncryptionService {
       // Generate a new cryptographically secure 256-bit key
       final newKey = Hive.generateSecureKey();
       final keyBytes = Uint8List.fromList(newKey);
-      await _storage.write(key: _storageKey, value: base64Encode(keyBytes));
+      await _storage
+          .write(key: _storageKey, value: base64Encode(keyBytes))
+          .timeout(const Duration(milliseconds: 1500));
       _cachedKey = keyBytes;
       return _cachedKey!;
     } catch (e) {

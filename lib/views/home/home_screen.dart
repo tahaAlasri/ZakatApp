@@ -16,6 +16,7 @@ import '../../core/widgets/category_icon_badge.dart';
 import '../analytics/zakat_analytics_screen.dart';
 import '../history/zakat_history_screen.dart';
 import '../../core/services/cloud_sync_service.dart';
+import '../../core/services/market_price_service.dart';
 import '../requests/my_requests_screen.dart';
 import '../notifications/notifications_center_screen.dart';
 import '../payment/zakat_payment_screen.dart';
@@ -108,26 +109,39 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: isDark ? AppColors.darkCard : Colors.white,
         onRefresh: () async {
           final cloudSync = Provider.of<CloudSyncService>(context, listen: false);
+          MarketPricesResult? priceResult;
           try {
-            await Future.wait([
-              cloudSync.refreshAll(),
-              zakatProv.fetchAndApplyMarketPrices(),
-            ]).timeout(const Duration(seconds: 4));
+            final fSync = cloudSync.refreshAll();
+            final fPrices = zakatProv.fetchAndApplyMarketPrices();
+            await fSync.timeout(const Duration(seconds: 4));
+            priceResult = await fPrices.timeout(const Duration(seconds: 4));
           } catch (_) {}
           zakatProv.reloadPricesFromPreferences();
           zakatProv.loadRecords();
           if (context.mounted) {
+            final isLive = priceResult?.isLiveApi ?? false;
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              SnackBar(
                 content: Row(
                   children: [
-                    Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-                    SizedBox(width: 8),
-                    Text('تم تحديث الأسعار والبيانات بنجاح'),
+                    Icon(
+                      isLive ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isLive
+                            ? '🌐 تم تحديث الأسعار اللحظية والبيانات بنجاح من البورصة والسحابة'
+                            : (priceResult?.message ?? '📴 الجهاز غير متصل بالإنترنت - تم تطبيق الأسعار السائدة المعتمدة محلياً'),
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
                   ],
                 ),
-                backgroundColor: AppColors.emeraldPrimary,
-                duration: Duration(seconds: 2),
+                backgroundColor: isLive ? AppColors.emeraldPrimary : AppColors.warning,
+                duration: const Duration(seconds: 3),
                 behavior: SnackBarBehavior.floating,
               ),
             );

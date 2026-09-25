@@ -27,39 +27,33 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Arabic date formatting symbols and Hijri calendar
-  await initializeDateFormatting('ar', null);
-  HijriCalendar.setLocal('ar');
-
-  // Initialize Firebase
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    await initializeDateFormatting('ar', null);
+    HijriCalendar.setLocal('ar');
   } catch (e) {
-    debugPrint('Firebase init error: $e');
+    debugPrint('Date formatting init error: $e');
   }
 
-  // Initialize Core Local & Cloud Services
-  await PreferencesService.init();
-  await LocalDbService.init();
-  await AuthService.init();
-  await NotificationService.init();
+  // Initialize Core Local Services fast (under 1s)
   try {
-    await PermissionService.requestNotificationPermission();
+    await PreferencesService.init().timeout(const Duration(seconds: 2));
+    await LocalDbService.init().timeout(const Duration(seconds: 2));
+    await AuthService.init().timeout(const Duration(seconds: 2));
+    await NotificationService.init().timeout(const Duration(seconds: 2));
   } catch (e) {
-    debugPrint('Permission error on start: $e');
+    debugPrint('Local service init error: $e');
   }
+
   final cloudSync = CloudSyncService();
-  await cloudSync.init();
-
+  final zakatProvider = ZakatProvider();
   final appLockManager = AppLockManager();
+
+  // Background Async Initializers (Firebase, CloudSync, Permissions)
+  // None of these will block the UI thread or runApp
+  _initAsyncBackgroundServices(cloudSync);
+
   appLockManager.init();
 
-  final zakatProvider = ZakatProvider();
-
-  // مزامنة تلقائية: عند تحديث الأسعار من لوحة التحكم في CloudSyncService،
-  // يتم تلقائياً إعادة تحميل الأسعار في ZakatProvider
   cloudSync.addListener(() {
     zakatProvider.reloadPricesFromPreferences();
   });
@@ -130,4 +124,27 @@ class ZakatApp extends StatelessWidget {
       home: const SplashScreen(),
     );
   }
+}
+
+/// تهيئة الخدمات السحابية والإشعارات في الخلفية دون تعطيل أو تأخير إقلاع الواجهة
+void _initAsyncBackgroundServices(CloudSyncService cloudSync) async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).timeout(const Duration(seconds: 4));
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    debugPrint('Firebase background init note: $e');
+  }
+
+  try {
+    await cloudSync.init().timeout(const Duration(seconds: 4));
+  } catch (e) {
+    debugPrint('CloudSync background init note: $e');
+  }
+
+  PermissionService.requestNotificationPermission().catchError((e) {
+    debugPrint('Permission error on start: $e');
+    return false;
+  });
 }

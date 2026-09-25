@@ -290,81 +290,79 @@ class AuthService {
   }
 
   static Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    _lastKnownUser = _getLastKnownUser(prefs) ?? _findUserInRegistry(prefs);
+    try {
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 2));
+      _lastKnownUser = _getLastKnownUser(prefs) ?? _findUserInRegistry(prefs);
 
-    // Check if Firebase already has an active session
-    final fbUser = _firebaseAuth?.currentUser;
-    if (fbUser != null) {
-      final email = fbUser.email ?? '';
-      String? name = _cleanName(fbUser.displayName, email);
+      // Check if Firebase already has an active session
+      final fbUser = _firebaseAuth?.currentUser;
+      if (fbUser != null) {
+        final email = fbUser.email ?? '';
+        String? name = _cleanName(fbUser.displayName, email);
 
-      final regUser = _findUserInRegistry(prefs, email);
-      if (name == null && regUser != null) {
-        name = _cleanName(regUser.name, email);
+        final regUser = _findUserInRegistry(prefs, email);
+        if (name == null && regUser != null) {
+          name = _cleanName(regUser.name, email);
+        }
+
+        if (name == null) {
+          final lastUser = _getLastKnownUser(prefs);
+          if (lastUser != null && lastUser.email.toLowerCase() == email.toLowerCase()) {
+            name = _cleanName(lastUser.name, email);
+          }
+        }
+
+        final user = UserModel(
+          id: fbUser.uid,
+          name: name ?? 'المستخدم',
+          email: email,
+          phone: (regUser?.phone.isNotEmpty == true)
+              ? regUser!.phone
+              : (fbUser.phoneNumber ?? '777000111'),
+          profileImagePath: regUser?.profileImagePath,
+          isBiometricEnabled: regUser?.isBiometricEnabled ?? PreferencesService.isBiometricEnabled,
+        );
+        await _saveSession(prefs, user);
+
+        // تزامن غير معطل في الخلفية لتحديث الاسم من Firestore
+        _readUserFromFirestore(fbUser.uid).then((firestoreUser) {
+          if (firestoreUser != null && firestoreUser.name.isNotEmpty) {
+            final updatedName = _cleanName(firestoreUser.name, email);
+            if (updatedName != null && updatedName != _currentUser?.name) {
+              _currentUser = _currentUser?.copyWith(name: updatedName);
+              _saveSession(prefs, _currentUser!);
+            }
+          }
+        }).catchError((_) {});
+
+        return;
       }
 
-      if (name == null) {
-        final lastUser = _getLastKnownUser(prefs);
-        if (lastUser != null && lastUser.email.toLowerCase() == email.toLowerCase()) {
-          name = _cleanName(lastUser.name, email);
-        }
-      }
-
-      // قراءة بيانات المستخدم من Firestore لضمان دقة البيانات
-      UserModel? firestoreUser;
-      try {
-        firestoreUser = await _readUserFromFirestore(fbUser.uid);
-        if (name == null && firestoreUser != null) {
-          name = _cleanName(firestoreUser.name, email);
-        }
-      } catch (_) {}
-
-      // If we found a clean name from registry but Firebase lacked it, sync it to Firebase
-      if (name != null && _cleanName(fbUser.displayName, email) == null) {
+      // Load cached session if available
+      final userJson = prefs.getString(_keyCurrentUser);
+      if (userJson != null) {
         try {
-          await fbUser.updateDisplayName(name);
-          await fbUser.reload();
-        } catch (_) {}
-      }
-
-      final user = UserModel(
-        id: fbUser.uid,
-        name: name ?? 'المستخدم',
-        email: email,
-        phone: (regUser?.phone.isNotEmpty == true)
-            ? regUser!.phone
-            : (firestoreUser != null && firestoreUser.phone.isNotEmpty)
-                ? firestoreUser.phone
-                : (fbUser.phoneNumber ?? '777000111'),
-        profileImagePath: regUser?.profileImagePath,
-        isBiometricEnabled: regUser?.isBiometricEnabled ?? PreferencesService.isBiometricEnabled,
-      );
-      await _saveSession(prefs, user);
-      return;
-    }
-
-    // Load cached session if available
-    final userJson = prefs.getString(_keyCurrentUser);
-    if (userJson != null) {
-      try {
-        var user = UserModel.fromMap(Map<String, dynamic>.from(jsonDecode(userJson)));
-        if (_cleanName(user.name, user.email) == null) {
-          final regUser = _findUserInRegistry(prefs, user.email);
-          final cleanName = _cleanName(regUser?.name, user.email) ??
-              _cleanName(_getLastKnownUser(prefs)?.name, user.email) ??
-              'المستخدم';
-          user = user.copyWith(
-            name: cleanName,
-            phone: regUser?.phone ?? user.phone,
-            profileImagePath: regUser?.profileImagePath ?? user.profileImagePath,
-          );
-          await _saveSession(prefs, user);
+          var user = UserModel.fromMap(Map<String, dynamic>.from(jsonDecode(userJson)));
+          if (_cleanName(user.name, user.email) == null) {
+            final regUser = _findUserInRegistry(prefs, user.email);
+            final cleanName = _cleanName(regUser?.name, user.email) ??
+                _cleanName(_getLastKnownUser(prefs)?.name, user.email) ??
+                'المستخدم';
+            user = user.copyWith(
+              name: cleanName,
+              phone: regUser?.phone ?? user.phone,
+              profileImagePath: regUser?.profileImagePath ?? user.profileImagePath,
+            );
+            await _saveSession(prefs, user);
+          }
+          _currentUser = user;
+        } catch (_) {
+          _currentUser = null;
         }
-        _currentUser = user;
-      } catch (_) {
-        _currentUser = null;
       }
+    } catch (e) {
+      debugPrint('AuthService init error: $e');
     }
   }
 

@@ -293,7 +293,7 @@ class MarketPriceService {
       silverPrice: market.defaultSilver,
       updatedAt: fallbackNow,
       isLiveApi: false,
-      message: 'تم تطبيق الأسعار السائدة المعتمدة لـ ${market.name}',
+      message: 'الجهاز غير متصل بالإنترنت - تم تطبيق الأسعار السائدة المعتمدة لـ ${market.name}',
       snapshot: fallbackSnapshot,
     );
   }

@@ -49,6 +49,21 @@ class AnnouncementItem {
   }
 }
 
+class RequestSubmissionResult {
+  final String referenceCode;
+  final bool isCloudSaved;
+  final String userMessage;
+
+  const RequestSubmissionResult({
+    required this.referenceCode,
+    required this.isCloudSaved,
+    required this.userMessage,
+  });
+
+  @override
+  String toString() => referenceCode;
+}
+
 class AppNotificationItem {
   final String id;
   final String title;
@@ -728,7 +743,7 @@ class CloudSyncService extends ChangeNotifier {
   }
 
   // FIX: مهلة زمنية ذكية وحفظ محلي فوري لمنع تعليق التطبيق
-  Future<String> submitOfficialRequest(AssistanceRequest req) async {
+  Future<RequestSubmissionResult> submitOfficialRequest(AssistanceRequest req) async {
     final user = _auth?.currentUser;
     final now = DateTime.now();
     final randomSuffix = (1000 + (now.millisecondsSinceEpoch % 9000)).toString();
@@ -779,7 +794,7 @@ class CloudSyncService extends ChangeNotifier {
       referenceCode: refCode,
       userId: user?.uid,
       userEmail: user?.email,
-      status: cloudSaved ? 'قيد المراجعة' : 'قيد المراجعة (محلياً)',
+      status: cloudSaved ? 'قيد المراجعة' : 'محفوظ محلياً (بانتظار الإنترنت)',
       createdAt: now,
     );
 
@@ -788,20 +803,28 @@ class CloudSyncService extends ChangeNotifier {
 
     _knownRequestStatuses[docId] = 'قيد المراجعة';
 
+    final userMessage = cloudSaved
+        ? 'تم إرسال طلبك رسمياً إلى خوادم الهيئة برقم المرجع: $refCode'
+        : 'تم حفظ طلبك محلياً على جهازك برقم المرجع: $refCode (سيتم رفعه تلقائياً فور توفر الإنترنت)';
+
     _addNotification(
       AppNotificationItem(
         id: 'notif_${now.millisecondsSinceEpoch}',
-        title: 'تم تقديم طلب المساعدة بنجاح',
+        title: cloudSaved ? 'تم إرسال طلب المساعدة سحابياً' : 'تم حفظ طلب المساعدة محلياً',
         body: cloudSaved
-            ? 'تم إرسال طلبك برقم مرجعي: $refCode إلى الهيئة العامة للزكاة سحابياً.'
-            : 'تم حفظ طلبك برقم مرجعي: $refCode محلياً، وسيتم رفعه تلقائياً فور توفر السحاب.',
+            ? 'تم إرسال طلبك برقم مرجعي: $refCode إلى الهيئة العامة للزكاة بنجاح.'
+            : 'تم حفظ طلبك برقم مرجعي: $refCode محلياً على جهازك، وسيتم رفعه تلقائياً فور توفر الإنترنت.',
         type: 'request',
         timestamp: now,
         targetId: docId,
       ),
     );
 
-    return refCode;
+    return RequestSubmissionResult(
+      referenceCode: refCode,
+      isCloudSaved: cloudSaved,
+      userMessage: userMessage,
+    );
   }
 
   void _addNotification(AppNotificationItem item) {

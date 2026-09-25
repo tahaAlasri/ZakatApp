@@ -48,9 +48,14 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final tempDir = Directory.systemTemp.createTempSync('zakat_test_hive_');
     Hive.init(tempDir.path);
+    EncryptionService.setMockKey(Uint8List(32));
     await initializeDateFormatting('ar', null);
     await PreferencesService.init();
     await LocalDbService.init();
+  });
+
+  setUp(() {
+    EncryptionService.setMockKey(Uint8List(32));
   });
 
   group('1. Zakat Constants & Core Thresholds', () {
